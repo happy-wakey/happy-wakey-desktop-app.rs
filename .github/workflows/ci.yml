@@ -1,0 +1,106 @@
+name: Rust and Qt contract
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ci.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'src/**'
+      - 'cpp/**'
+      - 'qml/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/ci.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'src/**'
+      - 'cpp/**'
+      - 'qml/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: happy-wakey-rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-qt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install Qt 6 build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libssl-dev \
+            qt6-base-dev \
+            qt6-base-dev-tools \
+            qt6-base-private-dev \
+            qt6-declarative-dev \
+            qt6-declarative-dev-tools \
+            qt6-tools-dev \
+            qt6-webengine-dev
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Prove the advisory dependency is patched exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          lock = tomllib.loads(Path('Cargo.lock').read_text(encoding='utf-8'))
+          versions = sorted({
+              package['version']
+              for package in lock['package']
+              if package['name'] == 'event-listener'
+          })
+          if versions != ['5.4.2']:
+              raise SystemExit(f'expected only event-listener 5.4.2, found {versions}')
+          PY
+
+      - name: Format, compile, lint, and test
+        env:
+          CARGO_TERM_COLOR: always
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo check --locked --all-targets
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked --all-targets
+
+      - name: Reject conflict markers and whitespace errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git grep -nE '^(<<<<<<< |=======|>>>>>>> )' -- \
+            Cargo.toml Cargo.lock build.rs src cpp qml; then
+            echo 'git conflict marker detected' >&2
+            exit 1
+          fi
