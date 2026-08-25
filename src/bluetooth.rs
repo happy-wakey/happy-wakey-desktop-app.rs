@@ -13,8 +13,8 @@ use btleplug::{
 use serde::Serialize;
 use uuid::Uuid;
 
-const SERVICE_UUID: Uuid = Uuid::from_u128(0x8e0e_0001_7d5a_4c3f_9c31_94e9d447fc01);
-const COMMAND_UUID: Uuid = Uuid::from_u128(0x8e0e_0002_7d5a_4c3f_9c31_94e9d447fc01);
+const SERVICE_UUID: Uuid = Uuid::from_u128(0x8e0e_0001_7d5a_4c3f_9c31_94e9_d447_fc01);
+const COMMAND_UUID: Uuid = Uuid::from_u128(0x8e0e_0002_7d5a_4c3f_9c31_94e9_d447_fc01);
 const SCAN_TIME: Duration = Duration::from_secs(4);
 const CONNECT_TIME: Duration = Duration::from_secs(8);
 const MAX_COMMAND_BYTES: usize = 512;

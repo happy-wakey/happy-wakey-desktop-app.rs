@@ -8,8 +8,6 @@ Rectangle {
     color: theme.page
 
     property var theme
-    signal finished()
-
     property var steps: [
         { id: "welcome", title: "Start the day in one place", kicker: "Happy Wakey keeps the daily essentials close without turning your desktop into tab soup." },
         { id: "account", title: "Connect calendar sync", kicker: "Sign in once, then calendar reminders and cloud onboarding progress can follow you." },
@@ -18,10 +16,9 @@ Rectangle {
         { id: "ready", title: "You are ready", kicker: "Your workspace is set up. The app will open straight into the dashboard next time." }
     ]
 
-    property int stepIndex: initialStepIndex()
+    readonly property int stepIndex: Backend.onboarding_step_index
     property var cfg: parseConfig()
     property string actionStatus: ""
-    property bool userNavigated: false
 
     function parseConfig() {
         try {
@@ -31,56 +28,29 @@ Rectangle {
         }
     }
 
-    function parseOnboarding() {
-        try {
-            return JSON.parse(Backend.onboarding_json)
-        } catch(e) {
-            return { completed: false, current_step: "welcome", step_index: 0 }
-        }
-    }
-
-    function initialStepIndex() {
-        var state = parseOnboarding()
-        if (state.completed) return steps.length - 1
-        var idx = Number(state.step_index || 0)
-        if (idx < 0) return 0
-        if (idx >= steps.length) return steps.length - 1
-        return idx
-    }
-
-    function persistStep(completed) {
-        actionStatus = completed === true ? "Opening dashboard..." : "Saved " + steps[stepIndex].title
-        Backend.set_status(actionStatus)
-        Backend.save_onboarding_state(steps[stepIndex].id, stepIndex, completed === true)
-    }
-
     function nextStep() {
         if (stepIndex < steps.length - 1) {
-            userNavigated = true
-            stepIndex += 1
-            persistStep(false)
+            actionStatus = "Saving next setup step..."
+            Backend.onboarding_next()
         }
     }
 
     function previousStep() {
         if (stepIndex > 0) {
-            userNavigated = true
-            stepIndex -= 1
-            persistStep(false)
+            actionStatus = "Saving previous setup step..."
+            Backend.onboarding_previous()
         }
     }
 
     function skipToReady() {
-        userNavigated = true
-        stepIndex = steps.length - 1
-        persistStep(false)
+        actionStatus = "Saving ready state..."
+        Backend.onboarding_skip_to_ready()
     }
 
     function finishOnboarding() {
-        userNavigated = true
+        actionStatus = "Opening dashboard..."
         applyStarterConfig()
-        persistStep(true)
-        root.finished()
+        Backend.onboarding_finish()
     }
 
     function applyStarterConfig() {
@@ -110,17 +80,6 @@ Rectangle {
         }
 
         Backend.save_config(JSON.stringify(cfg))
-    }
-
-    Connections {
-        target: Backend
-        function onOnboarding_jsonChanged() {
-            if (userNavigated) return
-            var state = parseOnboarding()
-            if (state.completed) return
-            var idx = Number(state.step_index || 0)
-            if (idx >= 0 && idx < steps.length) stepIndex = idx
-        }
     }
 
     Rectangle {
@@ -250,9 +209,9 @@ Rectangle {
                         Text { Layout.fillWidth: true; text: "Use Google, Apple, or Microsoft. Microsoft is routed through Supabase's Azure provider."; color: theme.text; font.pixelSize: 15; wrapMode: Text.WordWrap }
                         RowLayout {
                             spacing: 10
-                            Button { text: "Google"; onClicked: Backend.login("google") }
-                            Button { text: "Apple"; onClicked: Backend.login("apple") }
-                            Button { text: "Microsoft"; onClicked: Backend.login("microsoft") }
+                            Button { text: "Google"; enabled: !Backend.auth_busy; onClicked: Backend.login("google") }
+                            Button { text: "Apple"; enabled: !Backend.auth_busy; onClicked: Backend.login("apple") }
+                            Button { text: "Microsoft"; enabled: !Backend.auth_busy; onClicked: Backend.login("microsoft") }
                         }
                     }
 
