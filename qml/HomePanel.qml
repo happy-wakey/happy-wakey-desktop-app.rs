@@ -128,6 +128,7 @@ Rectangle {
     ListModel { id: stocksModel }
     ListModel { id: newsModel }
     ListModel { id: bookmarkModel }
+    ListModel { id: bluetoothPreviewModel }
 
     ColumnLayout {
         anchors.fill: parent
@@ -238,13 +239,13 @@ Rectangle {
                     theme: root.theme
                     Layout.preferredWidth: homeGrid.cardWidth
                     Layout.preferredHeight: 248
-                    title: "Browser"
-                    metric: bookmarkCount + " shortcuts"
-                    detail: "Pinned pages without duplicate tabs"
-                    model: bookmarkModel
-                    emptyText: "Save important pages in Settings."
+                    title: "Bluetooth Devices"
+                    metric: Backend.bluetooth_connected_device ? "Connected" : "Ready to scan"
+                    detail: "Native BLE control for Happy Wakey alarm hardware"
+                    model: bluetoothPreviewModel
+                    emptyText: "Open Devices to scan for compatible peripherals."
                     onOpen: root.navigate(5)
-                    onRefresh: rebuildBookmarks()
+                    onRefresh: Backend.scan_bluetooth()
                 }
 
                 Rectangle {

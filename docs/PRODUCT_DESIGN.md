@@ -29,7 +29,7 @@ The sidebar is stable and always uses the same order:
 3. Weather
 4. Stocks
 5. News
-6. Browser
+6. Devices
 7. Settings
 
 Home is the summary. Each other panel is the focused workspace. Users should never need to guess whether a command affects one panel or the whole app.
@@ -72,7 +72,7 @@ Home is a six-card summary:
 - Weather: favorite count and current-condition previews.
 - Stocks: watchlist count and quote previews.
 - News: keyword count and matched-headline previews.
-- Browser: shortcut count and saved-page previews.
+- Devices: Bluetooth support, connected device, and scan state.
 - Setup: account, sync, API, and backup state.
 
 Each data card has a local Refresh action and an Open action. Refresh All is disabled while any panel refresh is active, which prevents accidental duplicate sweeps.
@@ -142,18 +142,14 @@ The target relevance model should support:
 - recency window;
 - duplicate-story clustering.
 
-### Browser
+### Devices
 
-The browser is a purposeful quick-access workspace, not a replacement for a full browser. It uses Qt WebEngine and provides:
-
-- a URL field;
-- multiple tabs;
-- URL normalization;
-- HTTP/HTTPS-only navigation from user input;
-- duplicate URL detection;
-- saved bookmarks opened as tabs.
-
-The next pass should add back, forward, reload, stop, visible security origin, tab restore, and a controlled download policy.
+The Devices workspace uses the operating system's native BLE stack. It scans
+only for peripherals advertising the Happy Wakey service UUID, exposes explicit
+connect and disconnect controls, and sends a small versioned preview-alarm
+command to the product characteristic. It never carries auth tokens, email,
+owner IDs, or server credentials. External quick links remain editable in
+Settings and open in the system browser after HTTP/HTTPS validation.
 
 ### Settings
 

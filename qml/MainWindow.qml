@@ -12,15 +12,8 @@ ApplicationWindow {
     minimumWidth: 900
     minimumHeight: 600
 
-    property var onboardingState: {
-        try {
-            return JSON.parse(Backend.onboarding_json)
-        } catch(e) {
-            return { completed: false, current_step: "welcome", step_index: 0 }
-        }
-    }
-    property bool onboardingFinishedLocal: false
-    property bool onboardingComplete: onboardingFinishedLocal || onboardingState.completed === true
+    // The Rust state machine is the sole owner of onboarding completion.
+    readonly property bool onboardingComplete: Backend.onboarding_complete
 
     // Pull onboarding state from Supabase once the UI is up (replaces the
     // startup hydrate that main() used to run before the engine existed).
@@ -93,7 +86,7 @@ ApplicationWindow {
                         { icon: "🌤", label: "Weather",      panel: 2 },
                         { icon: "📈", label: "Stocks",       panel: 3 },
                         { icon: "📰", label: "News",         panel: 4 },
-                        { icon: "🌐", label: "Browser",      panel: 5 },
+                        { icon: "◉",  label: "Devices",      panel: 5 },
                         { icon: "⚙",  label: "Settings",     panel: 6 },
                     ]
 
@@ -146,7 +139,7 @@ ApplicationWindow {
                 WeatherPanel { theme: theme }
                 StocksPanel { theme: theme }
                 NewsPanel { theme: theme }
-                BrowserPanel { theme: theme }
+                DevicesPanel { theme: theme }
                 SettingsPanel { theme: theme }
             }
         }
@@ -156,9 +149,5 @@ ApplicationWindow {
         theme: theme
         anchors.fill: parent
         visible: !window.onboardingComplete
-        onFinished: {
-            window.onboardingFinishedLocal = true
-            stack.currentIndex = 0
-        }
     }
 }

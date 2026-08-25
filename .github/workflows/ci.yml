@@ -6,10 +6,13 @@ on:
       - '.github/workflows/ci.yml'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.cli-flags.toml'
       - 'build.rs'
       - 'src/**'
       - 'cpp/**'
       - 'qml/**'
+      - 'formal/**'
+      - 'deploy/**'
   push:
     branches:
       - main
@@ -17,10 +20,13 @@ on:
       - '.github/workflows/ci.yml'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.cli-flags.toml'
       - 'build.rs'
       - 'src/**'
       - 'cpp/**'
       - 'qml/**'
+      - 'formal/**'
+      - 'deploy/**'
   workflow_dispatch:
 
 permissions:
@@ -50,19 +56,19 @@ jobs:
             cmake \
             ninja-build \
             pkg-config \
+            libdbus-1-dev \
             libssl-dev \
             qt6-base-dev \
             qt6-base-dev-tools \
             qt6-base-private-dev \
             qt6-declarative-dev \
             qt6-declarative-dev-tools \
-            qt6-tools-dev \
-            qt6-webengine-dev
+            qt6-tools-dev
 
       - name: Setup Rust stable
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
-          toolchain: stable
+          toolchain: "1.89"
           components: rustfmt, clippy
 
       - name: Prove the advisory dependency is patched exactly
