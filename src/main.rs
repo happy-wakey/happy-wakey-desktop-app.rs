@@ -1,3 +1,4 @@
+mod bluetooth;
 mod config;
 mod env_config;
 mod gateway;
@@ -26,12 +27,6 @@ mod qobject {
         type QString = cxx_qt_lib::QString;
     }
 
-    unsafe extern "C++" {
-        include!("webengine_shim.h");
-        #[rust_name = "init_web_engine"]
-        fn happy_init_web_engine();
-    }
-
     extern "RustQt" {
         #[qobject]
         #[qml_element]
@@ -53,6 +48,12 @@ mod qobject {
         // Config + onboarding
         #[qproperty(QString, app_config_json)]
         #[qproperty(QString, onboarding_json)]
+        // Native Bluetooth Low Energy devices
+        #[qproperty(QString, bluetooth_devices_json)]
+        #[qproperty(QString, bluetooth_connected_device)]
+        #[qproperty(bool, bluetooth_scanning)]
+        #[qproperty(bool, bluetooth_busy)]
+        #[qproperty(bool, bluetooth_supported)]
         // Status bar
         #[qproperty(QString, status_msg)]
         type Backend = super::BackendRust;
@@ -90,6 +91,14 @@ mod qobject {
         fn set_status(self: Pin<&mut Backend>, msg: &QString);
         #[qinvokable]
         fn reload_config(self: Pin<&mut Backend>);
+        #[qinvokable]
+        fn scan_bluetooth(self: Pin<&mut Backend>);
+        #[qinvokable]
+        fn connect_bluetooth(self: Pin<&mut Backend>, device_id: &QString);
+        #[qinvokable]
+        fn disconnect_bluetooth(self: Pin<&mut Backend>);
+        #[qinvokable]
+        fn test_bluetooth_alarm(self: Pin<&mut Backend>);
     }
 
     impl cxx_qt::Threading for Backend {}
@@ -115,6 +124,11 @@ pub struct BackendRust {
     news_loading: bool,
     app_config_json: QString,
     onboarding_json: QString,
+    bluetooth_devices_json: QString,
+    bluetooth_connected_device: QString,
+    bluetooth_scanning: bool,
+    bluetooth_busy: bool,
+    bluetooth_supported: bool,
     status_msg: QString,
 }
 
@@ -143,6 +157,15 @@ impl Default for BackendRust {
             news_loading: false,
             app_config_json: serialize_ui_config(&cfg),
             onboarding_json: serialize_onboarding(&cfg.onboarding),
+            bluetooth_devices_json: json_qstring(&Vec::<bluetooth::DeviceSummary>::new()),
+            bluetooth_connected_device: QString::default(),
+            bluetooth_scanning: false,
+            bluetooth_busy: false,
+            bluetooth_supported: cfg!(any(
+                target_os = "macos",
+                target_os = "linux",
+                target_os = "windows"
+            )),
             status_msg: QString::default(),
         }
     }
@@ -501,6 +524,131 @@ impl qobject::Backend {
         apply_config_snapshot(self.as_mut(), &cfg);
         emit_status(self, "Config reloaded".to_string());
     }
+
+    fn scan_bluetooth(mut self: Pin<&mut Self>) {
+        if *self.bluetooth_busy() {
+            return;
+        }
+        self.as_mut().set_bluetooth_busy(true);
+        self.as_mut().set_bluetooth_scanning(true);
+        emit_status(
+            self.as_mut(),
+            "Scanning for Happy Wakey Bluetooth devices...".into(),
+        );
+        let thread = self.qt_thread();
+        std::thread::spawn(move || {
+            let result = bluetooth::scan();
+            thread
+                .queue(move |mut backend| {
+                    backend.as_mut().set_bluetooth_busy(false);
+                    backend.as_mut().set_bluetooth_scanning(false);
+                    match result {
+                        Ok(devices) => {
+                            let count = devices.len();
+                            backend
+                                .as_mut()
+                                .set_bluetooth_devices_json(json_qstring(&devices));
+                            emit_status(
+                                backend,
+                                format!("Bluetooth scan complete: {count} compatible device(s)"),
+                            );
+                        }
+                        Err(error) => {
+                            emit_status(backend, format!("Bluetooth scan failed: {error}"));
+                        }
+                    }
+                })
+                .ok();
+        });
+    }
+
+    fn connect_bluetooth(mut self: Pin<&mut Self>, device_id: &QString) {
+        if *self.bluetooth_busy() {
+            return;
+        }
+        let device_id = device_id.to_string();
+        self.as_mut().set_bluetooth_busy(true);
+        emit_status(self.as_mut(), "Connecting to Happy Wakey device...".into());
+        let thread = self.qt_thread();
+        std::thread::spawn(move || {
+            let result = bluetooth::connect(&device_id);
+            thread
+                .queue(move |mut backend| {
+                    backend.as_mut().set_bluetooth_busy(false);
+                    match result {
+                        Ok(device) => {
+                            backend
+                                .as_mut()
+                                .set_bluetooth_connected_device(QString::from(device.id.as_str()));
+                            emit_status(backend, format!("Bluetooth connected: {}", device.name));
+                        }
+                        Err(error) => {
+                            emit_status(backend, format!("Bluetooth connection failed: {error}"));
+                        }
+                    }
+                })
+                .ok();
+        });
+    }
+
+    fn disconnect_bluetooth(mut self: Pin<&mut Self>) {
+        if *self.bluetooth_busy() {
+            return;
+        }
+        let device_id = self.bluetooth_connected_device().to_string();
+        if device_id.is_empty() {
+            emit_status(self, "No Bluetooth device is connected".into());
+            return;
+        }
+        self.as_mut().set_bluetooth_busy(true);
+        let thread = self.qt_thread();
+        std::thread::spawn(move || {
+            let result = bluetooth::disconnect(&device_id);
+            thread
+                .queue(move |mut backend| {
+                    backend.as_mut().set_bluetooth_busy(false);
+                    match result {
+                        Ok(()) => {
+                            backend
+                                .as_mut()
+                                .set_bluetooth_connected_device(QString::default());
+                            emit_status(backend, "Bluetooth device disconnected".into());
+                        }
+                        Err(error) => {
+                            emit_status(backend, format!("Bluetooth disconnect failed: {error}"));
+                        }
+                    }
+                })
+                .ok();
+        });
+    }
+
+    fn test_bluetooth_alarm(mut self: Pin<&mut Self>) {
+        if *self.bluetooth_busy() {
+            return;
+        }
+        let device_id = self.bluetooth_connected_device().to_string();
+        if device_id.is_empty() {
+            emit_status(self, "Connect a Happy Wakey Bluetooth device first".into());
+            return;
+        }
+        self.as_mut().set_bluetooth_busy(true);
+        let thread = self.qt_thread();
+        std::thread::spawn(move || {
+            let result = bluetooth::send_preview_alarm(&device_id);
+            thread
+                .queue(move |mut backend| {
+                    backend.as_mut().set_bluetooth_busy(false);
+                    match result {
+                        Ok(()) => emit_status(backend, "Bluetooth preview alarm sent".into()),
+                        Err(error) => {
+                            emit_status(backend, format!("Bluetooth preview failed: {error}"));
+                        }
+                    }
+                })
+                .ok();
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -678,9 +826,6 @@ fn safe_external_url(raw: &str) -> Result<url::Url, String> {
 // ---------------------------------------------------------------------------
 fn main() {
     env_config::init();
-
-    // WebEngine must be initialized before the QML engine loads a WebEngineView.
-    qobject::init_web_engine();
 
     let mut app = cxx_qt_lib::QGuiApplication::new();
     let mut engine = cxx_qt_lib::QQmlApplicationEngine::new();

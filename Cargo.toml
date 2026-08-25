@@ -2,7 +2,7 @@
 name = "happy-wakey-desktop-app"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.89"
 license = "MIT"
 repository = "https://github.com/happy-wakey/happy-wakey-desktop-app.rs"
 
@@ -19,11 +19,14 @@ chrono = { version = "0.4", features = ["serde"] }
 url = "2"
 rand = "0.8"
 base64 = "0.22"
+btleplug = "0.12"
 sha2 = "0.10"
 webbrowser = "1"
 dirs = "6"
 dotenvy = "0.15"
 notify-rust = "4.18"
+tokio = { version = "1", features = ["rt", "time"] }
+uuid = { version = "1", features = ["v4"] }
 
 [build-dependencies]
 cxx-qt-build = { version = "0.7", features = ["link_qt_object_files"] }

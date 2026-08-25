@@ -4,19 +4,23 @@
 
 Yes. The primary application is a native Qt window. It does not render its navigation, panels, or controls with HTML/CSS. QML describes a Qt Quick scene graph and Qt Controls render the application UI through the platform's graphics stack.
 
-Qt WebEngine appears only inside the Browser panel, where rendering web pages is the feature itself.
+There is no embedded browser, HTML renderer, or webview. Validated HTTP/HTTPS
+links are delegated to the system browser.
 
 ## Is It Cross-Platform?
 
 The source architecture is cross-platform across macOS, Windows, and Linux:
 
 - Rust supports all three operating systems.
-- Qt 6 Quick, Controls, and WebEngine support all three.
+- Qt 6 Quick and Controls support all three.
+- `btleplug` maps BLE operations to CoreBluetooth, WinRT, and BlueZ.
 - CXX-Qt generates the Rust/C++/QObject bridge for each target.
 - Reqwest with Rustls provides portable HTTPS networking.
 - Serde JSON, Chrono, URL, and the remaining Rust libraries are portable.
 
-It is not one universal binary. Each operating system needs a native build that links and packages the correct Qt libraries and WebEngine resources. Platform signing and installers are also different.
+It is not one universal binary. Each operating system needs a native build that
+links and packages the correct Qt libraries and declares its platform Bluetooth
+permissions. Platform signing and installers are also different.
 
 ## High-Level Structure
 
@@ -34,7 +38,7 @@ flowchart LR
     Backend <--> Supabase["Supabase auth and REST sync"]
     Backend --> ReminderEngine["Canonical event and reminder engine"]
     ReminderEngine --> OSNotifications["macOS, Windows, Linux notifications"]
-    QML --> WebEngine["Qt WebEngine browser tabs"]
+    Backend --> BLE["Native BLE / Happy Wakey alarm devices"]
 ```
 
 The local reminder path is implemented: normalized calendar events feed a 20-second Rust worker, configurable offsets, and an atomic deduplication ledger. `notify-rust` supplies the current native notification adapter. An optional cloud path reconciles deterministic future reminder jobs to a small Rust gateway so email can be delivered while the app is closed. Durable event caching, snooze/actions, and installed-package acceptance on Windows and Linux remain future work.
@@ -42,14 +46,13 @@ The local reminder path is implemented: normalized calendar events feed a 20-sec
 ## Runtime Lifecycle
 
 1. `main()` loads environment configuration.
-2. A tiny C++ shim calls `QtWebEngineQuick::initialize()` before QML loads a `WebEngineView`.
-3. Rust constructs `QGuiApplication` and `QQmlApplicationEngine`.
-4. The engine loads `MainWindow.qml` from the compiled Qt resource path.
-5. CXX-Qt exposes one QML singleton named `Backend`.
-6. QML reads typed Backend properties and invokes typed Backend methods.
-7. Rust starts blocking network work on worker threads.
-8. Results are queued back onto the Qt GUI thread.
-9. Rust serializes service results as JSON strings; QML parses them into view models.
+2. Rust constructs `QGuiApplication` and `QQmlApplicationEngine`.
+3. The engine loads `MainWindow.qml` from the compiled Qt resource path.
+4. CXX-Qt exposes one QML singleton named `Backend`.
+5. QML reads typed Backend properties and invokes typed Backend methods.
+6. Rust starts blocking network and Bluetooth work on worker threads.
+7. Results are queued back onto the Qt GUI thread.
+8. Rust serializes service results as JSON strings; QML parses them into view models.
 
 The GUI thread never intentionally performs provider HTTP calls.
 
@@ -61,6 +64,8 @@ The GUI thread never intentionally performs provider HTTP calls.
 - data: `calendar_json`, `calendar_agenda_json`, `weather_json`, `stocks_json`, `news_json`;
 - loading state: one boolean per external data panel;
 - configuration: `app_config_json`, `onboarding_json`;
+- Bluetooth: discovered devices, connected-device identity, scan/busy state,
+  and platform support;
 - user feedback: `status_msg`.
 
 Important QML invokables include:
@@ -72,6 +77,8 @@ Important QML invokables include:
 - `save_onboarding_state(...)`;
 - `open_url(url)`;
 - `test_notification()`;
+- `scan_bluetooth()`, `connect_bluetooth(...)`, `disconnect_bluetooth()`, and
+  `test_bluetooth_alarm()`;
 - `reload_config()`.
 
 The bridge is typed at the Qt boundary. JSON is used for collection payloads because CXX-Qt list/model bindings would add more bridge types and code. This is pragmatic for the current size, but larger datasets should eventually use typed Qt models to avoid repeated parse/copy work.
@@ -140,7 +147,7 @@ Shared-auth access tokens are cached only in process memory and are cleared on l
 | Language/core | Rust 2021 | State, networking, validation, auth, persistence, threading |
 | Native UI | Qt 6 Quick/QML | Window, layout, controls, theme, panels |
 | Rust/Qt bridge | `cxx`, `cxx-qt`, `cxx-qt-lib` 0.7 | Generated QObject and safe Rust/C++ interop |
-| Embedded web | Qt WebEngineQuick | Browser tabs and page rendering |
+| Bluetooth | `btleplug` 0.12 | Native filtered BLE discovery, GATT connection, and command writes |
 | HTTP | Reqwest 0.12 blocking client + Rustls | HTTPS provider calls from worker threads |
 | Serialization | Serde + Serde JSON | Config, provider responses, QML payloads |
 | Dates/times | Chrono | Calendar windows, timestamps, token expiry |
@@ -166,6 +173,7 @@ Shared-auth access tokens are cached only in process memory and are cleared on l
 | `src/http.rs` | Shared bounded and retry-aware HTTP GET layer |
 | `src/gateway.rs` | Shared-auth token exchange/cache and cloud reminder reconciliation |
 | `src/reminders.rs` | Reminder reconciliation, native delivery, and atomic deduplication ledger |
+| `src/bluetooth.rs` | Product-service discovery, connection lifecycle, and bounded BLE commands |
 | `src/supabase.rs` | PKCE OAuth loopback login and session parsing |
 | `src/supabase_config.rs` | User-scoped Supabase REST config/onboarding access |
 | `src/services/calendar.rs` | Google Calendar and Microsoft Graph adapters |
@@ -176,11 +184,15 @@ Shared-auth access tokens are cached only in process memory and are cleared on l
 | `qml/Theme.qml` | Time-aware light palette |
 | `qml/OnboardingPanel.qml` | Five-step setup flow |
 | `qml/*Panel.qml` | Feature-specific views |
-| `cpp/webengine_shim.h` | Required pre-QML WebEngine initialization |
+| `qml/DevicesPanel.qml` | Native Bluetooth discovery and device controls |
 | `supabase_setup.sql` | Declarative idempotent schema, RLS, policies, triggers |
 
 ## Why Qt Instead of an HTML Shell?
 
-Qt meets the original requirement for a non-HTML application renderer while preserving one UI implementation across desktop platforms. It also includes a mature embedded browser engine, accessibility integration, high-DPI rendering, native window management, and deployment tools.
+Qt meets the original requirement for a non-HTML application renderer while
+preserving one UI implementation across desktop platforms. It provides
+accessibility integration, high-DPI rendering, native window management, and
+deployment tools without embedding a browser engine.
 
-The tradeoff is packaging size and complexity, especially for Qt WebEngine. Every distribution must carry the appropriate Qt shared libraries, QML modules, helper processes, locales, and WebEngine resources.
+Every distribution carries only the required Qt Quick libraries, QML modules,
+and platform plugins plus the operating system's native Bluetooth adapter.

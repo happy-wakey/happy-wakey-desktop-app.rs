@@ -1,13 +1,20 @@
 # happy-wakey-desktop-app.rs
 
-A cross-platform Rust desktop app for calendar, weather, markets, news, and frequently used pages. This repository revives the complete history of `happy-wakey.rs` under the organization-wide `*-desktop-app.rs` convention. The interface is native Qt/QML, the application core is Rust, and Supabase provides optional auth and config sync. Local reminders need no Happy Wakey server; opt-in off-app email reminders use the Shared Auth-backed product gateway.
+A cross-platform Rust desktop app for calendar, weather, markets, news, native
+Bluetooth alarm hardware, and frequently used external links. This repository
+revives the complete history of `happy-wakey.rs` under the organization-wide
+`*-desktop-app.rs` convention. The interface is native Qt/QML, the application
+core is Rust, and Supabase provides optional auth and config sync. It contains
+no React surface, embedded browser, or webview. URLs open in the user's system
+browser. Local reminders need no Happy Wakey server; opt-in off-app email
+reminders use the Shared Auth-backed product gateway.
 
 Dependencies and repository scripts are declared in `.zpkg.toml`; use the released `zed-pkg` CLI as the dependency-management entry point.
 
 ## Prerequisites
 
 - **Rust** 1.75+ (install via [rustup](https://rustup.rs))
-- **Qt 6** with WebEngine (installed via Homebrew, or system package manager)
+- **Qt 6** Quick and Controls (installed via Homebrew, or system package manager)
 - On macOS: `brew install qt@6` (ensure `qmake6` is in PATH)
 
 ## Quick Start
@@ -60,6 +67,7 @@ Flag definitions live in `.cli-flags.toml` (compatible with `flags-2-env` tool).
 - **Calendar:** Google Calendar and Microsoft Graph use provider OAuth tokens obtained through Supabase login.
 - **Reminders:** a local Rust scheduler delivers configurable desktop alerts and persists a deduplication ledger; macOS builds require a stable registered `HAPPY_WAKEY_BUNDLE_ID`.
 - **Off-app reminders:** an opt-in setting reconciles future calendar reminders to the Happy Wakey gateway. The desktop exchanges its Supabase token for a short-lived shared-auth token; the gateway derives the verified email from that identity and delegates delivery through the contact service.
+- **Bluetooth:** native BLE discovery is filtered to the Happy Wakey service UUID. The Devices panel can connect, disconnect, and send a bounded versioned preview-alarm command over the product command characteristic. BLE payloads never contain Shared Auth credentials or customer identifiers.
 
 All GET integrations share a pooled HTTP client with connection and request timeouts, bounded JSON responses, limited redirects, and retries for transient failures. API keys are sent in headers where the provider supports it.
 
@@ -89,7 +97,7 @@ qml/
   WeatherPanel.qml     # Weather cards
   StocksPanel.qml      # Stock watchlist
   NewsPanel.qml        # News feed
-  BrowserPanel.qml     # Tabbed QWebEngineView
+  DevicesPanel.qml     # Native BLE discovery and alarm-device controls
   SettingsPanel.qml    # Auth buttons, bookmarks, config
 ```
 

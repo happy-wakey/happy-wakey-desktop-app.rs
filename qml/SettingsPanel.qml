@@ -321,9 +321,9 @@ Rectangle {
                     }
                 }
 
-                // ---- Bookmarks (Quick Browser URLs) ----
+                // ---- External Quick Links ----
                 SectionBox {
-                    title: "Browser Bookmarks"
+                    title: "External Quick Links"
                     Layout.fillWidth: true
 
                     ColumnLayout {

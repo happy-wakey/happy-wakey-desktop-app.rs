@@ -93,7 +93,7 @@ ApplicationWindow {
                         { icon: "🌤", label: "Weather",      panel: 2 },
                         { icon: "📈", label: "Stocks",       panel: 3 },
                         { icon: "📰", label: "News",         panel: 4 },
-                        { icon: "🌐", label: "Browser",      panel: 5 },
+                        { icon: "◉",  label: "Devices",      panel: 5 },
                         { icon: "⚙",  label: "Settings",     panel: 6 },
                     ]
 
@@ -146,7 +146,7 @@ ApplicationWindow {
                 WeatherPanel { theme: theme }
                 StocksPanel { theme: theme }
                 NewsPanel { theme: theme }
-                BrowserPanel { theme: theme }
+                DevicesPanel { theme: theme }
                 SettingsPanel { theme: theme }
             }
         }
