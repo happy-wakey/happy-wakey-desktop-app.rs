@@ -793,7 +793,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "happy-wakey"
+name = "happy-wakey-desktop-app"
 version = "0.1.0"
 dependencies = [
  "base64",

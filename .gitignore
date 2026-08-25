@@ -1,4 +1,6 @@
 /target
+.zed/
+zed_modules/
 .env
 tmp
 temp

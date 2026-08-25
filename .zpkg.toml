@@ -1,0 +1,23 @@
+[package]
+org = "happy-wakey"
+name = "happy-wakey-desktop-app"
+version = "0.1.0"
+description = "Native Rust and Qt desktop application for Happy Wakey"
+license = "MIT"
+keywords = ["desktop", "alarms", "calendar", "shared-auth", "rust"]
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/happy-wakey/happy-wakey-desktop-app.rs"
+
+[publish]
+include_readme = true
+tag_format = "v{version}"
+exclude = [".env", ".env.*", "target/**", "tmp/**", "**/*.log", ".DS_Store"]
+
+[targets.repository]
+dir = "."
+adapter = "rust"
+
+[scripts]
+test = "cargo test --locked"

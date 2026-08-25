@@ -1,6 +1,8 @@
-# Happy Wakey
+# happy-wakey-desktop-app.rs
 
-A cross-platform Rust desktop app for calendar, weather, markets, news, and frequently used pages. The interface is native Qt/QML, the application core is Rust, and Supabase provides optional auth and config sync. Local reminders need no Happy Wakey server; opt-in off-app email reminders use the shared-auth-backed product gateway.
+A cross-platform Rust desktop app for calendar, weather, markets, news, and frequently used pages. This repository revives the complete history of `happy-wakey.rs` under the organization-wide `*-desktop-app.rs` convention. The interface is native Qt/QML, the application core is Rust, and Supabase provides optional auth and config sync. Local reminders need no Happy Wakey server; opt-in off-app email reminders use the Shared Auth-backed product gateway.
+
+Dependencies and repository scripts are declared in `.zpkg.toml`; use the released `zed-pkg` CLI as the dependency-management entry point.
 
 ## Prerequisites
 
@@ -12,7 +14,7 @@ A cross-platform Rust desktop app for calendar, weather, markets, news, and freq
 
 ```bash
 # Clone and enter the project
-git clone <repo-url> && cd happy-wakey.rs
+git clone https://github.com/happy-wakey/happy-wakey-desktop-app.rs.git && cd happy-wakey-desktop-app.rs
 
 # Copy env template and fill in your keys
 cp .env.example .env
