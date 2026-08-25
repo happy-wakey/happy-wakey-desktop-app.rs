@@ -1,3 +1,4 @@
+mod app_state;
 mod config;
 mod env_config;
 mod gateway;
@@ -7,8 +8,12 @@ mod services;
 mod supabase;
 mod supabase_config;
 
+use app_state::{
+    AppMachine, AuthPhase, Event as StateEvent, Lane, OnboardingStep, OperationToken, Provider,
+    TransitionOutcome,
+};
 use core::pin::Pin;
-use cxx_qt::Threading;
+use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
 
 // ---------------------------------------------------------------------------
@@ -38,6 +43,8 @@ mod qobject {
         #[qml_singleton]
         // Auth
         #[qproperty(bool, logged_in)]
+        #[qproperty(bool, auth_busy)]
+        #[qproperty(QString, auth_state)]
         #[qproperty(QString, user_email)]
         #[qproperty(QString, user_id)]
         // Feed data (JSON payloads, parsed in QML)
@@ -53,6 +60,9 @@ mod qobject {
         // Config + onboarding
         #[qproperty(QString, app_config_json)]
         #[qproperty(QString, onboarding_json)]
+        #[qproperty(i32, onboarding_step_index)]
+        #[qproperty(bool, onboarding_complete)]
+        #[qproperty(QString, app_state_json)]
         // Status bar
         #[qproperty(QString, status_msg)]
         type Backend = super::BackendRust;
@@ -78,12 +88,13 @@ mod qobject {
         #[qinvokable]
         fn save_config(self: Pin<&mut Backend>, json: &QString);
         #[qinvokable]
-        fn save_onboarding_state(
-            self: Pin<&mut Backend>,
-            step: &QString,
-            step_index: i32,
-            completed: bool,
-        );
+        fn onboarding_next(self: Pin<&mut Backend>);
+        #[qinvokable]
+        fn onboarding_previous(self: Pin<&mut Backend>);
+        #[qinvokable]
+        fn onboarding_skip_to_ready(self: Pin<&mut Backend>);
+        #[qinvokable]
+        fn onboarding_finish(self: Pin<&mut Backend>);
         #[qinvokable]
         fn open_url(self: Pin<&mut Backend>, url: &QString);
         #[qinvokable]
@@ -101,7 +112,10 @@ type BackendThread = cxx_qt::CxxQtThread<Backend>;
 
 // The Rust-side state backing the QObject's properties.
 pub struct BackendRust {
+    machine: AppMachine,
     logged_in: bool,
+    auth_busy: bool,
+    auth_state: QString,
     user_email: QString,
     user_id: QString,
     calendar_json: QString,
@@ -115,6 +129,9 @@ pub struct BackendRust {
     news_loading: bool,
     app_config_json: QString,
     onboarding_json: QString,
+    onboarding_step_index: i32,
+    onboarding_complete: bool,
+    app_state_json: QString,
     status_msg: QString,
 }
 
@@ -128,8 +145,19 @@ impl Default for BackendRust {
             .as_ref()
             .and_then(|s| s.email.clone())
             .unwrap_or_default();
+        let onboarding =
+            OnboardingStep::from_persisted(&cfg.onboarding.current_step, cfg.onboarding.completed);
+        let machine = AppMachine::new(cfg.supabase_session.is_some(), onboarding);
         Self {
+            app_state_json: serialize_machine(&machine),
+            machine,
             logged_in: cfg.supabase_session.is_some(),
+            auth_busy: false,
+            auth_state: QString::from(if cfg.supabase_session.is_some() {
+                "signed_in"
+            } else {
+                "signed_out"
+            }),
             user_email: QString::from(email.as_str()),
             user_id: QString::from(cfg.user_id.as_str()),
             calendar_json: json_qstring(&Vec::<services::calendar::CalendarEvent>::new()),
@@ -143,6 +171,8 @@ impl Default for BackendRust {
             news_loading: false,
             app_config_json: serialize_ui_config(&cfg),
             onboarding_json: serialize_onboarding(&cfg.onboarding),
+            onboarding_step_index: i32::from(onboarding.index()),
+            onboarding_complete: onboarding == OnboardingStep::Complete,
             status_msg: QString::default(),
         }
     }
@@ -154,21 +184,45 @@ impl Default for BackendRust {
 impl qobject::Backend {
     /// Called once from MainWindow.qml on completion: pull onboarding state from
     /// Supabase (if signed in) and merge it in.
-    fn startup(self: Pin<&mut Self>) {
+    fn startup(mut self: Pin<&mut Self>) {
+        if !dispatch_machine(self.as_mut(), StateEvent::StartupCompleted).committed() {
+            emit_status(
+                self,
+                "Application startup was already processed".to_string(),
+            );
+            return;
+        }
         let cfg = config::load();
         reminders::update_settings(cfg.reminder_settings.clone());
         reminders::start_worker();
         hydrate_onboarding(self, &cfg);
     }
 
-    fn login(self: Pin<&mut Self>, provider: &QString) {
+    fn login(mut self: Pin<&mut Self>, provider: &QString) {
         let provider = provider.to_string();
         match supabase::normalize_provider(&provider) {
             Ok(p) => {
+                let formal_provider = match p.as_str() {
+                    "google" => Provider::Google,
+                    "apple" => Provider::Apple,
+                    "azure" => Provider::Azure,
+                    _ => {
+                        emit_status(self, "Unsupported sign-in provider".to_string());
+                        return;
+                    }
+                };
+                let Some(token) =
+                    begin_operation(self.as_mut(), StateEvent::LoginRequested(formal_provider))
+                else {
+                    return;
+                };
+                emit_status(self.as_mut(), format!("Starting {p} sign-in..."));
                 let thread = self.qt_thread();
                 std::thread::spawn(move || {
                     let result = supabase::login_with_provider(&p);
-                    thread.queue(move |b| on_login_result(b, result)).ok();
+                    thread
+                        .queue(move |b| on_login_result(b, token, result))
+                        .ok();
                 });
             }
             Err(e) => emit_status(self, e),
@@ -176,23 +230,44 @@ impl qobject::Backend {
     }
 
     fn logout(mut self: Pin<&mut Self>) {
+        let mut candidate = self.as_ref().get_ref().rust().machine.clone();
+        if !candidate.dispatch(StateEvent::LogoutRequested).committed() {
+            return;
+        }
         let mut cfg = config::load();
         cfg.supabase_session = None;
-        gateway::clear_session();
         if let Err(e) = config::save(&cfg) {
-            emit_status(self.as_mut(), format!("Logout config save failed: {e}"));
+            emit_status(
+                self,
+                format!("Logout failed closed because the session could not be removed: {e}"),
+            );
+            return;
         }
+        if !dispatch_machine(self.as_mut(), StateEvent::LogoutRequested).committed() {
+            emit_status(
+                self,
+                "Logout transition changed while it was being persisted".to_string(),
+            );
+            return;
+        }
+        gateway::clear_session();
         reminders::replace_events(Vec::new(), cfg.reminder_settings.clone());
+        self.as_mut().set_calendar_json(json_qstring(
+            &Vec::<services::calendar::CalendarEvent>::new(),
+        ));
+        self.as_mut()
+            .set_calendar_agenda_json(json_qstring(&services::calendar::build_agenda(&[])));
         apply_config_snapshot(self.as_mut(), &cfg);
         emit_status(self, "Logged out".to_string());
     }
 
     fn refresh_calendar(mut self: Pin<&mut Self>) {
-        if *self.calendar_loading() {
+        let Some(token) = begin_lane(self.as_mut(), Lane::Calendar) else {
             return;
-        }
+        };
         let cfg = config::load();
         let Some(session) = cfg.supabase_session.clone() else {
+            finish_lane(self.as_mut(), Lane::Calendar, token, false);
             emit_status(self, "Sign in before refreshing calendars".to_string());
             return;
         };
@@ -203,6 +278,7 @@ impl qobject::Backend {
             .clone()
             .filter(|t| !t.trim().is_empty())
         else {
+            finish_lane(self.as_mut(), Lane::Calendar, token, false);
             emit_status(
                 self,
                 "Calendar access wasn't granted at sign-in. Sign out and sign back in to allow calendar access.".to_string(),
@@ -213,7 +289,6 @@ impl qobject::Backend {
         let provider = session.provider.clone();
         let reminder_settings = cfg.reminder_settings.clone();
         let supabase_access_token = session.access_token.clone();
-        self.as_mut().set_calendar_loading(true);
         emit_status(self.as_mut(), "Refreshing calendar...".to_string());
         let thread = self.qt_thread();
         std::thread::spawn(move || {
@@ -224,40 +299,29 @@ impl qobject::Backend {
                 other => Err(format!(
                     "Calendar sync isn't supported for '{other}' sign-in"
                 )),
-            }
-            .map(|events| {
-                let agenda = services::calendar::build_agenda(&events);
-                reminders::replace_events(events.clone(), reminder_settings.clone());
-                let cloud_result = if reminder_settings.cloud_email_enabled {
-                    Some(gateway::sync_calendar_reminders(
-                        &supabase_access_token,
-                        &events,
-                        &reminder_settings,
-                    ))
-                } else {
-                    None
-                };
-                (events, agenda, cloud_result)
-            });
+            };
             thread
                 .queue(move |mut b| {
-                    b.as_mut().set_calendar_loading(false);
+                    let succeeded = result.is_ok();
+                    if !finish_lane(b.as_mut(), Lane::Calendar, token, succeeded) {
+                        return;
+                    }
                     match result {
-                        Ok((events, agenda, cloud_result)) => {
+                        Ok(events) => {
                             let count = events.len();
+                            let agenda = services::calendar::build_agenda(&events);
+                            reminders::replace_events(events.clone(), reminder_settings.clone());
                             b.as_mut().set_calendar_json(json_qstring(&events));
                             b.as_mut().set_calendar_agenda_json(json_qstring(&agenda));
-                            let message = match cloud_result {
-                                Some(Ok(result)) => format!(
-                                    "Calendar updated: {count} events; {} cloud reminder(s) pending",
-                                    result.pending
-                                ),
-                                Some(Err(error)) => format!(
-                                    "Calendar updated: {count} events; cloud reminder sync failed: {error}"
-                                ),
-                                None => format!("Calendar updated: {count} events"),
-                            };
-                            emit_status(b, message);
+                            emit_status(b.as_mut(), format!("Calendar updated: {count} events"));
+                            if reminder_settings.cloud_email_enabled {
+                                sync_cloud_reminders(
+                                    b,
+                                    supabase_access_token,
+                                    events,
+                                    reminder_settings,
+                                );
+                            }
                         }
                         Err(e) => emit_status(b, format!("Calendar refresh failed: {e}")),
                     }
@@ -266,51 +330,73 @@ impl qobject::Backend {
         });
     }
 
-    fn test_notification(self: Pin<&mut Self>) {
+    fn test_notification(mut self: Pin<&mut Self>) {
+        let Some(token) = begin_lane(self.as_mut(), Lane::DesktopNotification) else {
+            return;
+        };
+        emit_status(
+            self.as_mut(),
+            "Sending test desktop reminder...".to_string(),
+        );
         let thread = self.qt_thread();
         std::thread::spawn(move || {
             let result = reminders::show_test_notification();
             thread
-                .queue(move |b| match result {
-                    Ok(()) => emit_status(b, "Test reminder sent".to_string()),
-                    Err(error) => emit_status(b, error),
+                .queue(move |mut b| {
+                    if !finish_lane(b.as_mut(), Lane::DesktopNotification, token, result.is_ok()) {
+                        return;
+                    }
+                    match result {
+                        Ok(()) => emit_status(b, "Test reminder sent".to_string()),
+                        Err(error) => emit_status(b, error),
+                    }
                 })
                 .ok();
         });
     }
 
-    fn test_cloud_notification(self: Pin<&mut Self>) {
+    fn test_cloud_notification(mut self: Pin<&mut Self>) {
+        let Some(token) = begin_lane(self.as_mut(), Lane::CloudNotification) else {
+            return;
+        };
         let cfg = config::load();
         let Some(session) = cfg.supabase_session else {
+            finish_lane(self.as_mut(), Lane::CloudNotification, token, false);
             emit_status(self, "Sign in before testing cloud reminders".to_string());
             return;
         };
+        emit_status(self.as_mut(), "Queueing test cloud reminder...".to_string());
         let thread = self.qt_thread();
         std::thread::spawn(move || {
             let result = gateway::queue_test_reminder(&session.access_token);
             thread
-                .queue(move |b| match result {
-                    Ok(()) => emit_status(b, "Cloud reminder queued".to_string()),
-                    Err(error) => emit_status(b, format!("Cloud reminder failed: {error}")),
+                .queue(move |mut b| {
+                    if !finish_lane(b.as_mut(), Lane::CloudNotification, token, result.is_ok()) {
+                        return;
+                    }
+                    match result {
+                        Ok(()) => emit_status(b, "Cloud reminder queued".to_string()),
+                        Err(error) => emit_status(b, format!("Cloud reminder failed: {error}")),
+                    }
                 })
                 .ok();
         });
     }
 
     fn refresh_weather(mut self: Pin<&mut Self>) {
-        if *self.weather_loading() {
+        let Some(token) = begin_lane(self.as_mut(), Lane::Weather) else {
             return;
-        }
+        };
         let cfg = config::load();
         let locs = cfg.weather_locations.clone();
         if locs.is_empty() {
+            finish_lane(self.as_mut(), Lane::Weather, token, false);
             self.as_mut()
                 .set_weather_json(json_qstring(&Vec::<services::weather::WeatherData>::new()));
             emit_status(self, "Add a weather location in Settings".to_string());
             return;
         }
 
-        self.as_mut().set_weather_loading(true);
         emit_status(
             self.as_mut(),
             format!("Refreshing weather for {} location(s)...", locs.len()),
@@ -347,8 +433,11 @@ impl qobject::Backend {
             }
             thread
                 .queue(move |mut b| {
+                    let succeeded = !data.is_empty() || errors.is_empty();
+                    if !finish_lane(b.as_mut(), Lane::Weather, token, succeeded) {
+                        return;
+                    }
                     b.as_mut().set_weather_json(json_qstring(&data));
-                    b.as_mut().set_weather_loading(false);
                     let message = if errors.is_empty() {
                         format!("Weather updated: {} location(s)", data.len())
                     } else if data.is_empty() {
@@ -372,16 +461,16 @@ impl qobject::Backend {
         // each). Guard against overlapping sweeps — a second trigger while one is
         // in flight is a no-op rather than another ~40-request burst (which also
         // risks tripping Finnhub's free-tier rate limit).
-        if *self.stocks_loading() {
+        let Some(token) = begin_lane(self.as_mut(), Lane::Stocks) else {
             return;
-        }
+        };
         let cfg = config::load();
         let syms = cfg.stock_symbols.clone();
         if syms.is_empty() {
+            finish_lane(self.as_mut(), Lane::Stocks, token, false);
             emit_status(self, "Add a stock symbol in Settings".to_string());
             return;
         }
-        self.as_mut().set_stocks_loading(true);
         emit_status(
             self.as_mut(),
             format!("Refreshing {} market symbol(s)...", syms.len()),
@@ -398,8 +487,11 @@ impl qobject::Backend {
             }
             thread
                 .queue(move |mut b| {
+                    let succeeded = !data.is_empty() || errors.is_empty();
+                    if !finish_lane(b.as_mut(), Lane::Stocks, token, succeeded) {
+                        return;
+                    }
                     b.as_mut().set_stocks_json(json_qstring(&data));
-                    b.as_mut().set_stocks_loading(false);
                     let message = if errors.is_empty() {
                         format!("Markets updated: {} symbol(s)", data.len())
                     } else if data.is_empty() {
@@ -418,19 +510,20 @@ impl qobject::Backend {
     }
 
     fn refresh_news(mut self: Pin<&mut Self>) {
-        if *self.news_loading() {
+        let Some(token) = begin_lane(self.as_mut(), Lane::News) else {
             return;
-        }
+        };
         let cfg = config::load();
         let kw = cfg.news_keywords.clone();
-        self.as_mut().set_news_loading(true);
         emit_status(self.as_mut(), "Refreshing headlines...".to_string());
         let thread = self.qt_thread();
         std::thread::spawn(move || {
             let result = services::news::fetch_news(&kw);
             thread
                 .queue(move |mut b| {
-                    b.as_mut().set_news_loading(false);
+                    if !finish_lane(b.as_mut(), Lane::News, token, result.is_ok()) {
+                        return;
+                    }
                     match result {
                         Ok(news) => {
                             let count = news.len();
@@ -464,21 +557,20 @@ impl qobject::Backend {
         }
     }
 
-    fn save_onboarding_state(
-        self: Pin<&mut Self>,
-        step: &QString,
-        step_index: i32,
-        completed: bool,
-    ) {
-        let cfg =
-            config::set_onboarding_state(config::load(), &step.to_string(), step_index, completed);
-        match config::save(&cfg) {
-            Ok(()) => {
-                sync_onboarding_to_supabase(&cfg, self.qt_thread());
-                apply_config_snapshot(self, &cfg);
-            }
-            Err(e) => emit_status(self, format!("Onboarding save failed: {e}")),
-        }
+    fn onboarding_next(self: Pin<&mut Self>) {
+        transition_onboarding(self, StateEvent::OnboardingNext);
+    }
+
+    fn onboarding_previous(self: Pin<&mut Self>) {
+        transition_onboarding(self, StateEvent::OnboardingPrevious);
+    }
+
+    fn onboarding_skip_to_ready(self: Pin<&mut Self>) {
+        transition_onboarding(self, StateEvent::OnboardingSkipToReady);
+    }
+
+    fn onboarding_finish(self: Pin<&mut Self>) {
+        transition_onboarding(self, StateEvent::OnboardingFinish);
     }
 
     fn open_url(self: Pin<&mut Self>, url: &QString) {
@@ -522,21 +614,134 @@ fn serialize_onboarding(state: &config::OnboardingState) -> QString {
     json_qstring(state)
 }
 
-fn apply_config_snapshot(mut b: Pin<&mut Backend>, cfg: &config::Config) {
-    b.as_mut().set_logged_in(cfg.supabase_session.is_some());
-    b.as_mut().set_user_id(QString::from(cfg.user_id.as_str()));
-    let email = cfg
-        .supabase_session
-        .as_ref()
-        .and_then(|s| s.email.clone())
-        .unwrap_or_default();
-    b.as_mut().set_user_email(QString::from(email.as_str()));
-    b.as_mut().set_app_config_json(serialize_ui_config(cfg));
-    b.as_mut()
-        .set_onboarding_json(serialize_onboarding(&cfg.onboarding));
+fn serialize_machine(machine: &AppMachine) -> QString {
+    json_qstring(machine)
 }
 
-fn on_login_result(mut b: Pin<&mut Backend>, result: Result<supabase::SupabaseSession, String>) {
+fn auth_phase_name(phase: AuthPhase) -> &'static str {
+    match phase {
+        AuthPhase::SignedOut => "signed_out",
+        AuthPhase::Authenticating => "authenticating",
+        AuthPhase::SignedIn => "signed_in",
+        AuthPhase::Failed => "failed",
+    }
+}
+
+fn sync_machine_properties(mut b: Pin<&mut Backend>) {
+    let (
+        logged_in,
+        auth_busy,
+        auth_state,
+        onboarding_index,
+        onboarding_complete,
+        calendar_loading,
+        weather_loading,
+        stocks_loading,
+        news_loading,
+        state_json,
+    ) = {
+        let machine = &b.as_ref().get_ref().rust().machine;
+        (
+            machine.is_signed_in(),
+            machine.authentication_in_progress(),
+            auth_phase_name(machine.auth_phase()),
+            i32::from(machine.onboarding().index()),
+            machine.onboarding() == OnboardingStep::Complete,
+            machine.lane(Lane::Calendar).is_running(),
+            machine.lane(Lane::Weather).is_running(),
+            machine.lane(Lane::Stocks).is_running(),
+            machine.lane(Lane::News).is_running(),
+            serialize_machine(machine),
+        )
+    };
+    b.as_mut().set_logged_in(logged_in);
+    b.as_mut().set_auth_busy(auth_busy);
+    b.as_mut().set_auth_state(QString::from(auth_state));
+    b.as_mut().set_onboarding_step_index(onboarding_index);
+    b.as_mut().set_onboarding_complete(onboarding_complete);
+    b.as_mut().set_calendar_loading(calendar_loading);
+    b.as_mut().set_weather_loading(weather_loading);
+    b.as_mut().set_stocks_loading(stocks_loading);
+    b.as_mut().set_news_loading(news_loading);
+    b.as_mut().set_app_state_json(state_json);
+}
+
+fn dispatch_machine(mut b: Pin<&mut Backend>, event: StateEvent) -> TransitionOutcome {
+    let outcome = b.as_mut().rust_mut().machine.dispatch(event);
+    sync_machine_properties(b);
+    outcome
+}
+
+fn emit_rejection(b: Pin<&mut Backend>, outcome: TransitionOutcome) {
+    if let TransitionOutcome::Rejected(reason) = outcome {
+        emit_status(b, reason.message().to_string());
+    }
+}
+
+fn begin_operation(mut b: Pin<&mut Backend>, event: StateEvent) -> Option<OperationToken> {
+    let outcome = dispatch_machine(b.as_mut(), event);
+    let token = outcome.token();
+    if token.is_none() {
+        emit_rejection(b, outcome);
+    }
+    token
+}
+
+fn begin_lane(b: Pin<&mut Backend>, lane: Lane) -> Option<OperationToken> {
+    begin_operation(b, StateEvent::LaneRequested(lane))
+}
+
+fn finish_lane(
+    mut b: Pin<&mut Backend>,
+    lane: Lane,
+    token: OperationToken,
+    succeeded: bool,
+) -> bool {
+    let event = if succeeded {
+        StateEvent::LaneSucceeded(lane, token)
+    } else {
+        StateEvent::LaneFailed(lane, token)
+    };
+    dispatch_machine(b.as_mut(), event).committed()
+}
+
+fn apply_config_snapshot(mut b: Pin<&mut Backend>, cfg: &config::Config) {
+    let onboarding = b.as_ref().get_ref().rust().machine.onboarding();
+    let mut projected = cfg.clone();
+    projected.onboarding.completed = onboarding == OnboardingStep::Complete;
+    projected.onboarding.current_step = onboarding.as_str().to_string();
+    projected.onboarding.step_index = onboarding.index();
+    b.as_mut().set_user_id(QString::from(cfg.user_id.as_str()));
+    let email = if b.as_ref().get_ref().rust().machine.is_signed_in() {
+        cfg.supabase_session
+            .as_ref()
+            .and_then(|s| s.email.clone())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    b.as_mut().set_user_email(QString::from(email.as_str()));
+    b.as_mut()
+        .set_app_config_json(serialize_ui_config(&projected));
+    b.as_mut()
+        .set_onboarding_json(serialize_onboarding(&projected.onboarding));
+    sync_machine_properties(b);
+}
+
+fn on_login_result(
+    mut b: Pin<&mut Backend>,
+    token: OperationToken,
+    result: Result<supabase::SupabaseSession, String>,
+) {
+    if !b
+        .as_ref()
+        .get_ref()
+        .rust()
+        .machine
+        .accepts_auth_token(token)
+    {
+        return;
+    }
     match result {
         Ok(session) => {
             let mut cfg = config::load();
@@ -552,63 +757,177 @@ fn on_login_result(mut b: Pin<&mut Backend>, result: Result<supabase::SupabaseSe
                 provider_refresh_token: session.provider_refresh_token,
             });
             if let Err(e) = config::save(&cfg) {
+                dispatch_machine(b.as_mut(), StateEvent::LoginFailed(token));
                 emit_status(
-                    b.as_mut(),
-                    format!("Login saved locally, but config save failed: {e}"),
+                    b,
+                    format!("Login failed closed because the session could not be saved: {e}"),
                 );
+                return;
+            }
+            if !dispatch_machine(b.as_mut(), StateEvent::LoginSucceeded(token)).committed() {
+                return;
             }
             sync_config_to_supabase(&cfg, b.qt_thread());
-            hydrate_onboarding(b.as_mut(), &cfg);
             apply_config_snapshot(b.as_mut(), &cfg);
+            hydrate_onboarding(b.as_mut(), &cfg);
             emit_status(b, "Logged in".to_string());
         }
-        Err(e) => emit_status(b, format!("Login failed: {e}")),
+        Err(e) => {
+            if dispatch_machine(b.as_mut(), StateEvent::LoginFailed(token)).committed() {
+                emit_status(b, format!("Login failed: {e}"));
+            }
+        }
     }
 }
 
-fn on_onboarding_synced(mut b: Pin<&mut Backend>, remote_state: config::OnboardingState) {
-    let mut cfg = config::load();
-    cfg.onboarding = remote_state;
-    match config::save(&cfg) {
-        Ok(()) => {
+fn transition_onboarding(mut b: Pin<&mut Backend>, event: StateEvent) {
+    let mut candidate = b.as_ref().get_ref().rust().machine.clone();
+    let preview = candidate.dispatch(event);
+    if !preview.committed() {
+        emit_rejection(b, preview);
+        return;
+    }
+
+    let step = candidate.onboarding();
+    let cfg = config::set_onboarding_state(
+        config::load(),
+        step.as_str(),
+        i32::from(step.index()),
+        step == OnboardingStep::Complete,
+    );
+    if let Err(error) = config::save(&cfg) {
+        emit_status(b, format!("Onboarding save failed: {error}"));
+        return;
+    }
+    if !dispatch_machine(b.as_mut(), event).committed() {
+        emit_status(
+            b,
+            "Onboarding transition changed while it was being persisted".to_string(),
+        );
+        return;
+    }
+    sync_onboarding_to_supabase(&cfg, b.qt_thread());
+    apply_config_snapshot(b, &cfg);
+}
+
+fn on_onboarding_hydrated(
+    mut b: Pin<&mut Backend>,
+    token: OperationToken,
+    local_state: config::OnboardingState,
+    result: Result<Option<config::OnboardingState>, String>,
+) {
+    if !b
+        .as_ref()
+        .get_ref()
+        .rust()
+        .machine
+        .accepts_lane_token(Lane::OnboardingHydration, token)
+    {
+        return;
+    }
+
+    match result {
+        Ok(Some(remote)) => {
+            let merged = config::merge_onboarding(&local_state, &remote);
+            let step = OnboardingStep::from_persisted(&merged.current_step, merged.completed);
+            let mut candidate = b.as_ref().get_ref().rust().machine.clone();
+            if !candidate
+                .dispatch(StateEvent::OnboardingReconciled(step))
+                .committed()
+            {
+                finish_lane(b, Lane::OnboardingHydration, token, true);
+                return;
+            }
+
+            let mut cfg = config::load();
+            cfg.onboarding = merged;
+            if let Err(error) = config::save(&cfg) {
+                finish_lane(b.as_mut(), Lane::OnboardingHydration, token, false);
+                emit_status(b, format!("Onboarding sync save failed: {error}"));
+                return;
+            }
+            if !finish_lane(b.as_mut(), Lane::OnboardingHydration, token, true) {
+                return;
+            }
+            if !dispatch_machine(b.as_mut(), StateEvent::OnboardingReconciled(step)).committed() {
+                emit_status(b, "Onboarding reconciliation became stale".to_string());
+                return;
+            }
             apply_config_snapshot(b.as_mut(), &cfg);
             sync_onboarding_to_supabase(&cfg, b.qt_thread());
         }
-        Err(e) => emit_status(b, format!("Onboarding sync save failed: {e}")),
+        Ok(None) => {
+            if !finish_lane(b.as_mut(), Lane::OnboardingHydration, token, true) {
+                return;
+            }
+            let cfg = config::load();
+            sync_onboarding_to_supabase(&cfg, b.qt_thread());
+        }
+        Err(error) => {
+            if finish_lane(b.as_mut(), Lane::OnboardingHydration, token, false) {
+                emit_status(b, format!("Supabase onboarding fetch failed: {error}"));
+            }
+        }
     }
 }
 
 // ---------------------------------------------------------------------------
 // Background sync helpers (own thread; report failures back via the GUI thread)
 // ---------------------------------------------------------------------------
-fn hydrate_onboarding(b: Pin<&mut Backend>, cfg: &config::Config) {
+fn sync_cloud_reminders(
+    mut b: Pin<&mut Backend>,
+    access_token: String,
+    events: Vec<services::calendar::CalendarEvent>,
+    reminder_settings: config::ReminderSettings,
+) {
+    let Some(token) = begin_lane(b.as_mut(), Lane::CloudReminderSync) else {
+        return;
+    };
+    let thread = b.qt_thread();
+    std::thread::spawn(move || {
+        let result = gateway::sync_calendar_reminders(&access_token, &events, &reminder_settings);
+        thread
+            .queue(move |mut b| {
+                if !finish_lane(b.as_mut(), Lane::CloudReminderSync, token, result.is_ok()) {
+                    return;
+                }
+                match result {
+                    Ok(result) => emit_status(
+                        b,
+                        format!(
+                            "Calendar and cloud reminders updated: {} pending",
+                            result.pending
+                        ),
+                    ),
+                    Err(error) => emit_status(
+                        b,
+                        format!("Calendar updated; cloud reminder sync failed: {error}"),
+                    ),
+                }
+            })
+            .ok();
+    });
+}
+
+fn hydrate_onboarding(mut b: Pin<&mut Backend>, cfg: &config::Config) {
     if !cfg.supabase_sync_enabled {
         return;
     }
     let Some(session) = cfg.supabase_session.as_ref() else {
         return;
     };
+    let Some(token) = begin_lane(b.as_mut(), Lane::OnboardingHydration) else {
+        return;
+    };
     let access_token = session.access_token.clone();
     let local_state = cfg.onboarding.clone();
     let thread = b.qt_thread();
-    std::thread::spawn(
-        move || match supabase_config::fetch_onboarding_state(&access_token) {
-            Ok(Some(remote)) => {
-                let merged = config::merge_onboarding(&local_state, &remote);
-                thread.queue(move |b| on_onboarding_synced(b, merged)).ok();
-            }
-            Ok(None) => {
-                let _ = supabase_config::save_onboarding_state(&access_token, &local_state);
-            }
-            Err(e) => {
-                thread
-                    .queue(move |b| {
-                        emit_status(b, format!("Supabase onboarding fetch failed: {e}"))
-                    })
-                    .ok();
-            }
-        },
-    );
+    std::thread::spawn(move || {
+        let result = supabase_config::fetch_onboarding_state(&access_token);
+        thread
+            .queue(move |b| on_onboarding_hydrated(b, token, local_state, result))
+            .ok();
+    });
 }
 
 fn sync_config_to_supabase(cfg: &config::Config, thread: BackendThread) {

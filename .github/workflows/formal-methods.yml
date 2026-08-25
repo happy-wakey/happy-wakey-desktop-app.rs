@@ -1,0 +1,155 @@
+name: Application state formal methods
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/formal-methods.yml'
+      - 'formal/**'
+      - 'src/app_state.rs'
+      - 'src/main.rs'
+      - 'src/config.rs'
+      - 'qml/MainWindow.qml'
+      - 'qml/OnboardingPanel.qml'
+      - 'qml/SettingsPanel.qml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/formal-methods.yml'
+      - 'formal/**'
+      - 'src/app_state.rs'
+      - 'src/main.rs'
+      - 'src/config.rs'
+      - 'qml/MainWindow.qml'
+      - 'qml/OnboardingPanel.qml'
+      - 'qml/SettingsPanel.qml'
+  schedule:
+    - cron: '23 7 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: happy-wakey-formal-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QUINT_PACKAGE: '@informalsystems/quint@0.32.0'
+
+jobs:
+  app-state:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install native Qt build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libssl-dev \
+            qt6-base-dev \
+            qt6-base-dev-tools \
+            qt6-base-private-dev \
+            qt6-declarative-dev \
+            qt6-declarative-dev-tools \
+            qt6-tools-dev \
+            qt6-webengine-dev
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Setup Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: Setup Java 21 for Apalache
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Check the production transition kernel
+        run: cargo test --locked app_state
+
+      - name: Typecheck model and deterministic traces
+        run: |
+          set -euo pipefail
+          npx --yes --package="$QUINT_PACKAGE" quint typecheck formal/app_state.qnt
+          npx --yes --package="$QUINT_PACKAGE" quint typecheck formal/app_state_test.qnt
+          npx --yes --package="$QUINT_PACKAGE" quint test \
+            formal/app_state_test.qnt \
+            --main=app_state_test \
+            --match='.*Test$'
+
+      - name: Explore 10,000 invariant-checked traces
+        run: |
+          set -euo pipefail
+          npx --yes --package="$QUINT_PACKAGE" quint run \
+            formal/app_state.qnt \
+            --main=app_state \
+            --max-samples=10000 \
+            --max-steps=24 \
+            --invariant=app_state_safety \
+            --witnesses \
+              booting_reached \
+              ready_reached \
+              signed_out_reached \
+              authenticating_reached \
+              signed_in_reached \
+              auth_failed_reached \
+              lane_idle_reached \
+              lane_running_reached \
+              lane_ready_reached \
+              lane_failed_reached \
+              onboarding_complete_reached
+
+      - name: Exhaustively check the bounded transition system
+        run: |
+          set -euo pipefail
+          mkdir -p .formal-artifacts
+          npx --yes --package="$QUINT_PACKAGE" quint verify \
+            formal/app_state.qnt \
+            --main=app_state \
+            --max-steps=4 \
+            --invariant=app_state_safety \
+            --out-itf='.formal-artifacts/counterexample.itf.json'
+
+      - name: Record exact verification inputs
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p .formal-artifacts
+          sha256sum \
+            formal/app_state.qnt \
+            formal/app_state_test.qnt \
+            src/app_state.rs \
+            src/main.rs \
+            src/config.rs \
+            qml/MainWindow.qml \
+            qml/OnboardingPanel.qml \
+            qml/SettingsPanel.qml \
+            > .formal-artifacts/provenance.sha256
+
+      - name: Upload proof provenance or counterexample
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: happy-wakey-app-state-formal-${{ github.sha }}
+          path: .formal-artifacts
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
