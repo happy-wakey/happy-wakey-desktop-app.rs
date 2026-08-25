@@ -8,6 +8,7 @@ repository = "https://github.com/happy-wakey/happy-wakey-desktop-app.rs"
 
 [dependencies]
 # Rust <-> Qt bridge (memory-safe, typed; replaces qmetaobject)
+anyhow = "1"
 cxx = "1"
 cxx-qt = "0.7"
 cxx-qt-lib = { version = "0.7", features = ["qt_full"] }
@@ -20,10 +21,10 @@ url = "2"
 rand = "0.8"
 base64 = "0.22"
 btleplug = "0.12"
+flags2env = { git = "https://github.com/flags-2-env/flags-2-env.git", rev = "b07214e30b4da675a0f591e362a2039cb47e9055" }
 sha2 = "0.10"
 webbrowser = "1"
 dirs = "6"
-dotenvy = "0.15"
 notify-rust = "4.18"
 tokio = { version = "1", features = ["rt", "time"] }
 uuid = { version = "1", features = ["v4"] }

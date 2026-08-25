@@ -1151,7 +1151,10 @@ fn safe_external_url(raw: &str) -> Result<url::Url, String> {
 // Entry point
 // ---------------------------------------------------------------------------
 fn main() {
-    env_config::init();
+    if let Err(error) = env_config::init() {
+        eprintln!("Happy Wakey configuration failed: {error:#}");
+        std::process::exit(2);
+    }
 
     let mut app = cxx_qt_lib::QGuiApplication::new();
     let mut engine = cxx_qt_lib::QQmlApplicationEngine::new();

@@ -13,7 +13,7 @@ Dependencies and repository scripts are declared in `.zpkg.toml`; use the releas
 
 ## Prerequisites
 
-- **Rust** 1.75+ (install via [rustup](https://rustup.rs))
+- **Rust** 1.89 (install via [rustup](https://rustup.rs))
 - **Qt 6** Quick and Controls (installed via Homebrew, or system package manager)
 - On macOS: `brew install qt@6` (ensure `qmake6` is in PATH)
 
@@ -23,9 +23,8 @@ Dependencies and repository scripts are declared in `.zpkg.toml`; use the releas
 # Clone and enter the project
 git clone https://github.com/happy-wakey/happy-wakey-desktop-app.rs.git && cd happy-wakey-desktop-app.rs
 
-# Copy env template and fill in your keys
+# Copy the local-only env template and fill in runtime credentials
 cp .env.example .env
-# Edit .env with SUPABASE_ANON_KEY, API keys, etc.
 
 # Build and run
 cargo run
@@ -35,29 +34,33 @@ cargo run
 
 Priority (highest to lowest):
 
-1. **CLI flags** — `cargo run -- --supabase-anon-key=xxx`
+1. **CLI flags** — only non-secret settings declared in `.cli-flags.toml`
 2. **System environment variables**
 3. **`.env` file** — key=value pairs in project root
-4. **Built-in defaults** — Supabase and Open-Meteo URLs have defaults; API keys default to empty
+4. **Schema defaults** — service URLs only; credentials never have defaults
+
+The executable uses the bundled Rust client from canonical
+`flags-2-env/flags-2-env` commit
+`b07214e30b4da675a0f591e362a2039cb47e9055`. Unknown or invalid options fail
+before Qt and worker threads start. Release packaging must place
+`.cli-flags.toml` beside the executable or in the macOS `Resources` directory.
 
 ### CLI flags
 
 | Flag | Env var | Short | Description |
 |------|---------|-------|-------------|
 | `--supabase-url` | `SUPABASE_URL` | `-s` | Supabase project URL |
-| `--supabase-anon-key` | `SUPABASE_ANON_KEY` | | Supabase anon/public key |
-| `--openweather-api-key` | `OPENWEATHER_API_KEY` | `-w` | OpenWeatherMap API key |
 | `--open-meteo-base-url` | `OPEN_METEO_BASE_URL` | | Open-Meteo endpoint |
-| `--open-meteo-api-key` | `OPEN_METEO_API_KEY` | | Open-Meteo customer API key |
-| `--finnhub-api-key` | `FINNHUB_API_KEY` | `-f` | Finnhub API key |
-| `--newsapi-key` | `NEWSAPI_KEY` | `-n` | NewsAPI key |
 | `--git-repo` | `GIT_REPO_PATH` | | Path to git config backup |
 | `--config-dir` | `CONFIG_DIR` | | Override config directory |
 | `--platform-url` | `HAPPY_WAKEY_PLATFORM_URL` | | Public platform base URL for shared auth and the Happy Wakey gateway |
 | `--shared-auth-url` | `HAPPY_WAKEY_SHARED_AUTH_URL` | | Development override for shared auth |
 | `--happy-wakey-gateway-url` | `HAPPY_WAKEY_GATEWAY_URL` | | Development override for the Happy Wakey gateway |
 
-Flag definitions live in `.cli-flags.toml` (compatible with `flags-2-env` tool).
+Credentials such as `SUPABASE_ANON_KEY`, provider API keys, and access tokens
+are environment/secret-store only. Passing a secret-shaped CLI option fails
+without echoing its value. The `.env` file is ignored by Git and is appropriate
+for local development only.
 
 ## External services
 
@@ -73,7 +76,9 @@ All GET integrations share a pooled HTTP client with connection and request time
 
 ## Supabase OAuth Setup
 
-See [`todos.md`](todos.md) for step-by-step instructions to configure Google, Apple, and Microsoft OAuth providers in the Supabase Dashboard.
+Configure Google, Apple, and Microsoft as upstream identity providers in the
+Supabase project, and restrict Happy Wakey cloud operations to the Shared Auth
+token exchange enforced by the product gateway.
 
 ## Project Structure
 
@@ -81,7 +86,7 @@ See [`todos.md`](todos.md) for step-by-step instructions to configure Google, Ap
 src/
   main.rs              # Entry point, Backend QObject, Qt event loop
   config.rs            # Local config (JSON in ~/.config/happy-wakey/)
-  env_config.rs        # .env + CLI flag parsing (flags-2-env style)
+  env_config.rs        # canonical bundled flags2env runtime boundary
   gateway.rs           # Shared-auth exchange + off-app reminder reconciliation
   reminders.rs         # Native reminder scheduler + delivery ledger
   supabase.rs          # PKCE OAuth login flow
