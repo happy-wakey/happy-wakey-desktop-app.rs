@@ -7,7 +7,6 @@ pub const ACTION: &str = "preview_alarm";
 pub const DURATION_MS: u32 = 3000;
 pub const MAX_COMMAND_BYTES: usize = 512;
 
-#[allow(dead_code)] // Shared with Flutter; QML documents the same JSON.
 pub fn encode_preview_alarm_command(operation_id: &str) -> Result<Vec<u8>, String> {
     if !is_uuid(operation_id) {
         return Err("Bluetooth operation identifier must be a UUID".into());

@@ -59,13 +59,6 @@ pub const DESTINATIONS: &[Destination] = &[
     },
 ];
 
-const _BLE_SCHEMA: &str = crate::bluetooth::SCHEMA;
-const _BLE_SERVICE: &str = crate::bluetooth::SERVICE_UUID;
-const _BLE_COMMAND: &str = crate::bluetooth::COMMAND_UUID;
-const _BLE_ACTION: &str = crate::bluetooth::ACTION;
-const _BLE_DURATION: u32 = crate::bluetooth::DURATION_MS;
-const _BLE_MAX_BYTES: usize = crate::bluetooth::MAX_COMMAND_BYTES;
-
 #[cfg(test)]
 mod tests {
     use super::*;
