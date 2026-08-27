@@ -65,22 +65,12 @@ pub struct Bookmark {
     pub url: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DailyTask {
     pub id: String,
     pub title: String,
     pub completed: bool,
-}
-
-impl Default for DailyTask {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            title: String::new(),
-            completed: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
