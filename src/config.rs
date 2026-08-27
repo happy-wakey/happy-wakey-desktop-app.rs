@@ -595,6 +595,34 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_keeps_planner_and_drops_unsafe_bookmarks() {
+        let mut config = Config::default();
+        config.tasks = vec![
+            DailyTask {
+                id: "blank".into(),
+                title: "   ".into(),
+                completed: false,
+            },
+            DailyTask {
+                id: "keep".into(),
+                title: " Write tests ".into(),
+                completed: true,
+            },
+        ];
+        config.focus_minutes = 999;
+        config.browser_bookmarks = vec![Bookmark {
+            id: "xss".into(),
+            title: "Nope".into(),
+            url: "javascript:alert(1)".into(),
+        }];
+        let sanitized = sanitize(config);
+        assert_eq!(sanitized.tasks.len(), 1);
+        assert_eq!(sanitized.tasks[0].title, "Write tests");
+        assert_eq!(sanitized.focus_minutes, 120);
+        assert!(sanitized.browser_bookmarks.is_empty());
+    }
+
+    #[test]
     fn merge_editable_config_preserves_identity_and_session() {
         let mut current = Config::default();
         current.user_id = "user-123".into();
