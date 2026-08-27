@@ -88,5 +88,15 @@ mod tests {
         assert!(qml.contains("PlannerPanel"));
         assert!(qml.contains("FocusPanel"));
         assert!(qml.contains("DevicesPanel"));
+        let planner = include_str!("../qml/PlannerPanel.qml");
+        let focus = include_str!("../qml/FocusPanel.qml");
+        let devices = include_str!("../qml/DevicesPanel.qml");
+        assert!(planner.contains("Daily planner"));
+        assert!(focus.contains("Start focus"));
+        assert!(focus.contains("Pause"));
+        assert!(devices.contains(crate::bluetooth::SCHEMA));
+        assert!(devices.contains(crate::bluetooth::SERVICE_UUID));
+        assert!(!devices.contains("token"));
+        assert!(!devices.contains("owner_id"));
     }
 }

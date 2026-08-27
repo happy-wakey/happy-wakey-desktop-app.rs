@@ -64,5 +64,13 @@ mod tests {
     #[test]
     fn preview_command_rejects_malformed_operation_identifiers() {
         assert!(encode_preview_alarm_command("not-an-operation-id").is_err());
+        assert!(encode_preview_alarm_command("").is_err());
+        assert!(encode_preview_alarm_command("018f5cc6-6d8b-7b2a-9f38-269e6a7b1f1").is_err());
+        let bytes = encode_preview_alarm_command("018F5CC6-6D8B-7B2A-9F38-269E6A7B1F11").unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            value["operation_id"],
+            "018f5cc6-6d8b-7b2a-9f38-269e6a7b1f11"
+        );
     }
 }

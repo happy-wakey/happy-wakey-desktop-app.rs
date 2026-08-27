@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use crate::url_safety::is_loopback_host;
+
 const OPEN_METEO_FORECAST_URL: &str = "https://api.open-meteo.com/v1/forecast";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -290,10 +292,6 @@ fn validate_coordinates(lat: f64, lon: f64) -> Result<(), String> {
     } else {
         Ok(())
     }
-}
-
-fn is_loopback_host(host: &str) -> bool {
-    matches!(host, "localhost" | "127.0.0.1" | "[::1]" | "::1")
 }
 
 fn wmo_condition(code: i32) -> &'static str {
