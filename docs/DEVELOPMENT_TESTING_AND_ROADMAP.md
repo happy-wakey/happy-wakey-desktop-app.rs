@@ -33,7 +33,7 @@ Important variables:
 | `CONFIG_DIR` | Isolated config location for tests |
 | `HAPPY_WAKEY_OAUTH_PORT` | OAuth loopback port; default 47217 |
 | `HAPPY_WAKEY_BUNDLE_ID` | Stable registered application ID used by macOS notifications |
-| `HAPPY_WAKEY_PLATFORM_URL` | Public base for shared auth and the Happy Wakey gateway |
+| `HAPPY_WAKEY_PLATFORM_URL` | Optional HTTPS hostname for shared auth and the gateway; no default |
 | `HAPPY_WAKEY_SHARED_AUTH_URL` | Loopback/development override for shared auth |
 | `HAPPY_WAKEY_GATEWAY_URL` | Loopback/development override for the product gateway |
 

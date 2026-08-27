@@ -46,7 +46,7 @@ Priority (highest to lowest):
 | `--newsapi-key` | `NEWSAPI_KEY` | `-n` | NewsAPI key |
 | `--git-repo` | `GIT_REPO_PATH` | | Path to git config backup |
 | `--config-dir` | `CONFIG_DIR` | | Override config directory |
-| `--platform-url` | `HAPPY_WAKEY_PLATFORM_URL` | | Public platform base URL for shared auth and the Happy Wakey gateway |
+| `--platform-url` | `HAPPY_WAKEY_PLATFORM_URL` | | Platform base URL for shared-auth and gateway. No default; HTTPS hostname only |
 | `--shared-auth-url` | `HAPPY_WAKEY_SHARED_AUTH_URL` | | Development override for shared auth |
 | `--happy-wakey-gateway-url` | `HAPPY_WAKEY_GATEWAY_URL` | | Development override for the Happy Wakey gateway |
 

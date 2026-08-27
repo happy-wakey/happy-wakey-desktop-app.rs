@@ -1,11 +1,11 @@
 use crate::config::ReminderSettings;
 use crate::services::calendar::CalendarEvent;
+use crate::url_safety::is_safe_http_url;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::{Mutex, OnceLock};
 use url::Url;
 
-const DEFAULT_PLATFORM_URL: &str = "https://98.90.186.114";
 const SESSION_EXPIRY_MARGIN_SECONDS: u64 = 60;
 const REMINDER_POLICY_VERSION: &str = "v1";
 
@@ -234,13 +234,16 @@ fn service_url(override_name: &str, default_prefix: &str, path: &str) -> Result<
     let raw = std::env::var(override_name)
         .ok()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| {
+        .or_else(|| {
             let platform = std::env::var("HAPPY_WAKEY_PLATFORM_URL")
                 .ok()
-                .filter(|value| !value.trim().is_empty())
-                .unwrap_or_else(|| DEFAULT_PLATFORM_URL.to_string());
-            format!("{}/{default_prefix}", platform.trim_end_matches('/'))
-        });
+                .filter(|value| !value.trim().is_empty())?;
+            Some(format!(
+                "{}/{default_prefix}",
+                platform.trim_end_matches('/')
+            ))
+        })
+        .ok_or_else(|| format!("{override_name} or HAPPY_WAKEY_PLATFORM_URL must be set"))?;
     let mut base =
         Url::parse(raw.trim()).map_err(|_| format!("{override_name} must be an absolute URL"))?;
     if base.host_str().is_none()
@@ -248,15 +251,9 @@ fn service_url(override_name: &str, default_prefix: &str, path: &str) -> Result<
         || base.password().is_some()
         || base.query().is_some()
         || base.fragment().is_some()
-        || !matches!(base.scheme(), "https" | "http")
+        || !is_safe_http_url(&base)
     {
         return Err(format!("{override_name} is not a safe HTTP service URL"));
-    }
-    let loopback = base
-        .host_str()
-        .is_some_and(|host| matches!(host, "127.0.0.1" | "localhost" | "::1"));
-    if base.scheme() != "https" && !loopback {
-        return Err(format!("{override_name} must use HTTPS"));
     }
     if !base.path().ends_with('/') {
         let directory = format!("{}/", base.path());
@@ -322,6 +319,21 @@ mod tests {
         assert_eq!(
             gateway_url("v1/bootstrap").unwrap().as_str(),
             "http://127.0.0.1:8128/v1/bootstrap"
+        );
+        std::env::remove_var("HAPPY_WAKEY_GATEWAY_URL");
+    }
+
+    #[test]
+    fn service_urls_fail_closed_without_platform_and_reject_public_ips() {
+        std::env::remove_var("HAPPY_WAKEY_GATEWAY_URL");
+        std::env::remove_var("HAPPY_WAKEY_PLATFORM_URL");
+        assert!(gateway_url("v1/bootstrap").is_err());
+        std::env::set_var("HAPPY_WAKEY_GATEWAY_URL", "https://98.90.186.114/");
+        assert!(gateway_url("v1/bootstrap").is_err());
+        std::env::set_var("HAPPY_WAKEY_GATEWAY_URL", "https://gateway.example.test/");
+        assert_eq!(
+            gateway_url("v1/bootstrap").unwrap().as_str(),
+            "https://gateway.example.test/v1/bootstrap"
         );
         std::env::remove_var("HAPPY_WAKEY_GATEWAY_URL");
     }

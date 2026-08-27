@@ -1,4 +1,6 @@
+mod bluetooth;
 mod config;
+mod destinations;
 mod env_config;
 mod gateway;
 mod http;
@@ -6,6 +8,7 @@ mod reminders;
 mod services;
 mod supabase;
 mod supabase_config;
+mod url_safety;
 
 use core::pin::Pin;
 use cxx_qt::Threading;

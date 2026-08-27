@@ -210,7 +210,7 @@ Rectangle {
                     theme: root.theme
                     Layout.preferredWidth: homeGrid.cardWidth
                     Layout.preferredHeight: 248
-                    title: "Stocks"
+                    title: "Markets"
                     metric: stockSymbolCount + " symbols"
                     detail: "Markets, commodities, and securities"
                     model: stocksModel
@@ -243,7 +243,7 @@ Rectangle {
                     detail: "Pinned pages without duplicate tabs"
                     model: bookmarkModel
                     emptyText: "Save important pages in Settings."
-                    onOpen: root.navigate(5)
+                    onOpen: root.navigate(8)
                     onRefresh: rebuildBookmarks()
                 }
 
@@ -288,7 +288,7 @@ Rectangle {
                         Button {
                             text: "Open Settings"
                             Layout.alignment: Qt.AlignRight
-                            onClicked: root.navigate(6)
+                            onClicked: root.navigate(9)
                         }
                     }
                 }

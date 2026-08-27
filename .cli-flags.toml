@@ -1,5 +1,5 @@
 [help]
-url = "https://github.com/ORESoftware/happy-wakey.rs"
+url = "https://github.com/happy-wakey/happy-wakey-desktop-app.rs"
 
 [flags.supabase_url]
 env = "SUPABASE_URL"
@@ -72,8 +72,8 @@ help = "Override for config directory path"
 env = "HAPPY_WAKEY_PLATFORM_URL"
 aliases = ["platform-url"]
 type = "string"
-default = "https://98.90.186.114"
-help = "Public Happy Wakey platform base URL"
+default = ""
+help = "Public Happy Wakey platform base URL (HTTPS hostname; no IP default)"
 
 [flags.shared_auth_url]
 env = "HAPPY_WAKEY_SHARED_AUTH_URL"
