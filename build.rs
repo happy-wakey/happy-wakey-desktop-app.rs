@@ -3,11 +3,6 @@ use cxx_qt_build::{CxxQtBuilder, QmlModule};
 fn main() {
     CxxQtBuilder::new()
         .qt_module("Quick")
-        .qt_module("WebEngineQuick")
-        // Make the WebEngine init shim header visible to the generated bridge code.
-        .cc_builder(|cc| {
-            cc.include("cpp");
-        })
         .qml_module(QmlModule {
             uri: "com.happywakey",
             version_major: 1,
@@ -25,7 +20,6 @@ fn main() {
                 "qml/PlannerPanel.qml",
                 "qml/FocusPanel.qml",
                 "qml/DevicesPanel.qml",
-                "qml/BrowserPanel.qml",
                 "qml/SettingsPanel.qml",
                 "qml/OnboardingPanel.qml",
             ],

@@ -1,90 +1,58 @@
 [help]
 url = "https://github.com/happy-wakey/happy-wakey-desktop-app.rs"
 
+[parse]
+allow_unknown = false
+unknown_options_env = "HAPPY_WAKEY_UNKNOWN_OPTIONS"
+errors_env = "HAPPY_WAKEY_FLAG_ERRORS"
+
+[env]
+ignore = [
+  "FLAGS2ENV_CONFIG",
+  "SUPABASE_ANON_KEY",
+  "OPENWEATHER_API_KEY",
+  "OPEN_METEO_API_KEY",
+  "FINNHUB_API_KEY",
+  "NEWSAPI_KEY",
+  "HAPPY_WAKEY_ACCESS_TOKEN",
+  "HAPPY_WAKEY_BUNDLE_ID"
+]
+
 [flags.supabase_url]
 env = "SUPABASE_URL"
 aliases = ["supabase-url"]
 short = "s"
 type = "string"
 default = "https://vgzyyfhnendriyrhakkp.supabase.co"
-help = "Supabase project URL"
-
-[flags.supabase_anon_key]
-env = "SUPABASE_ANON_KEY"
-aliases = ["supabase-anon-key"]
-type = "string"
-default = ""
-help = "Supabase anon/public key"
-
-[flags.openweather_api_key]
-env = "OPENWEATHER_API_KEY"
-aliases = ["openweather-api-key", "owm-key"]
-short = "w"
-type = "string"
-default = ""
-help = "OpenWeatherMap API key"
 
 [flags.open_meteo_base_url]
 env = "OPEN_METEO_BASE_URL"
 aliases = ["open-meteo-base-url"]
 type = "string"
 default = "https://api.open-meteo.com/v1/forecast"
-help = "Open-Meteo forecast endpoint (use the paid customer endpoint for commercial distribution)"
 
-[flags.open_meteo_api_key]
-env = "OPEN_METEO_API_KEY"
-aliases = ["open-meteo-api-key"]
-type = "string"
-default = ""
-help = "Open-Meteo customer API key"
-
-[flags.finnhub_api_key]
-env = "FINNHUB_API_KEY"
-aliases = ["finnhub-api-key"]
-short = "f"
-type = "string"
-default = ""
-help = "Finnhub API key for stock data"
-
-[flags.newsapi_key]
-env = "NEWSAPI_KEY"
-aliases = ["newsapi-key", "news-api-key"]
-short = "n"
-type = "string"
-default = ""
-help = "NewsAPI key"
-
-[flags.git_repo]
+[flags.git_repo_path]
 env = "GIT_REPO_PATH"
 aliases = ["git-repo", "git-repo-path"]
 type = "string"
-default = ""
-help = "Path to git repository for config backup"
 
 [flags.config_dir]
 env = "CONFIG_DIR"
 aliases = ["config-dir"]
 type = "string"
-default = ""
-help = "Override for config directory path"
 
 [flags.platform_url]
 env = "HAPPY_WAKEY_PLATFORM_URL"
 aliases = ["platform-url"]
 type = "string"
 default = ""
-help = "Public Happy Wakey platform base URL (HTTPS hostname; no IP default)"
 
 [flags.shared_auth_url]
 env = "HAPPY_WAKEY_SHARED_AUTH_URL"
 aliases = ["shared-auth-url"]
 type = "string"
-default = ""
-help = "Override the shared-auth service base URL"
 
-[flags.happy_wakey_gateway_url]
+[flags.gateway_url]
 env = "HAPPY_WAKEY_GATEWAY_URL"
 aliases = ["happy-wakey-gateway-url"]
 type = "string"
-default = ""
-help = "Override the Happy Wakey gateway base URL"

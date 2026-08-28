@@ -12,15 +12,8 @@ ApplicationWindow {
     minimumWidth: 900
     minimumHeight: 600
 
-    property var onboardingState: {
-        try {
-            return JSON.parse(Backend.onboarding_json)
-        } catch(e) {
-            return { completed: false, current_step: "welcome", step_index: 0 }
-        }
-    }
-    property bool onboardingFinishedLocal: false
-    property bool onboardingComplete: onboardingFinishedLocal || onboardingState.completed === true
+    // The Rust state machine is the sole owner of onboarding completion.
+    readonly property bool onboardingComplete: Backend.onboarding_complete
 
     // Pull onboarding state from Supabase once the UI is up (replaces the
     // startup hydrate that main() used to run before the engine existed).
@@ -91,13 +84,12 @@ ApplicationWindow {
                         { icon: "⌂", label: "Home",         panel: 0 },
                         { icon: "📅", label: "Calendar",     panel: 1 },
                         { icon: "🌤", label: "Weather",      panel: 2 },
-                        { icon: "📈", label: "Markets",      panel: 3 },
+                        { icon: "📈", label: "Stocks",       panel: 3 },
                         { icon: "📰", label: "News",         panel: 4 },
                         { icon: "✓",  label: "Planner",      panel: 5 },
                         { icon: "⏱", label: "Focus",        panel: 6 },
-                        { icon: "📟", label: "Devices",      panel: 7 },
-                        { icon: "🌐", label: "Browser",      panel: 8 },
-                        { icon: "⚙",  label: "Settings",     panel: 9 },
+                        { icon: "◉",  label: "Devices",      panel: 7 },
+                        { icon: "⚙",  label: "Settings",     panel: 8 },
                     ]
 
                     ItemDelegate {
@@ -152,7 +144,6 @@ ApplicationWindow {
                 PlannerPanel { theme: theme }
                 FocusPanel { theme: theme }
                 DevicesPanel { theme: theme }
-                BrowserPanel { theme: theme }
                 SettingsPanel { theme: theme }
             }
         }
@@ -162,9 +153,5 @@ ApplicationWindow {
         theme: theme
         anchors.fill: parent
         visible: !window.onboardingComplete
-        onFinished: {
-            window.onboardingFinishedLocal = true
-            stack.currentIndex = 0
-        }
     }
 }

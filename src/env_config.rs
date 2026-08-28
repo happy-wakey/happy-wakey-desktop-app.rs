@@ -1,269 +1,119 @@
-use std::collections::HashMap;
-use std::path::Path;
+use std::{collections::HashMap, path::PathBuf};
 
-/// Load `.env`, then parse CLI flags against the built-in flag schema.
-/// CLI > system environment > .env > built-in defaults.
-pub fn init() {
-    // `from_path_iter` only parses values; it does not install them. `from_path`
-    // loads the file while preserving environment variables already set by the
-    // launcher, which is the precedence desktop packaging expects.
-    let _ = dotenvy::from_path(Path::new(".env"));
+use anyhow::{bail, Context, Result};
+use flags2env::BundledFlags2Env;
 
-    // 2. Define flags (same schema as .cli-flags.toml)
-    let entries = builtin_flags();
+const CONFIG_NAME: &str = ".cli-flags.toml";
 
-    // 3. Apply defaults first (lowest priority)
-    for entry in &entries {
-        let key = &entry.env;
-        if std::env::var(key).is_err() {
-            if let Some(ref d) = entry.default_val {
-                std::env::set_var(key, d);
-            }
-        }
+/// Resolve and apply the canonical flags2env schema exactly once, before Qt or
+/// any worker thread starts. Precedence is CLI > environment > `.env` > schema
+/// default, and secret-bearing keys are intentionally not declared as flags.
+pub fn init() -> Result<()> {
+    let config_path = find_config()?;
+    let parser = BundledFlags2Env::new();
+    parser
+        .audit_config(config_path.to_str())
+        .map_err(|_| anyhow::anyhow!("flags2env rejected the desktop flag schema"))?;
+    let argv = std::env::args().collect::<Vec<_>>();
+    let values = parse(&parser, &argv, &config_path)?;
+
+    // This is the single-threaded process entry point. All environment writes
+    // happen before Qt, Bluetooth, reminder, or network workers are created.
+    for (key, value) in values {
+        std::env::set_var(key, value);
     }
-
-    // 4. Parse CLI flags (highest priority)
-    let args: Vec<String> = std::env::args().collect();
-    let parsed = parse_flags(&args);
-
-    for entry in &entries {
-        if let Some(val) = resolve_flag(&parsed, entry) {
-            std::env::set_var(&entry.env, &val);
-        }
-    }
+    Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Flag definition
-// ---------------------------------------------------------------------------
-
-struct FlagEntry {
-    env: String,
-    aliases: Vec<String>,
-    short: Option<String>,
-    default_val: Option<String>,
+fn parse(
+    parser: &BundledFlags2Env,
+    argv: &[String],
+    config_path: &std::path::Path,
+) -> Result<HashMap<String, String>> {
+    let parsed = parser
+        .parse_structured(argv, config_path.to_str())
+        .map_err(|_| anyhow::anyhow!("flags2env could not parse the desktop configuration"))?;
+    if !parsed.unknown_options.is_empty() || !parsed.errors.is_empty() {
+        bail!(
+            "flags2env rejected {} unknown option(s) and {} invalid value(s)",
+            parsed.unknown_options.len(),
+            parsed.errors.len()
+        );
+    }
+    Ok(parsed.flags)
 }
 
-fn builtin_flags() -> Vec<FlagEntry> {
-    vec![
-        FlagEntry {
-            env: "SUPABASE_URL".into(),
-            aliases: vec!["supabase-url".into()],
-            short: Some("s".into()),
-            default_val: Some("https://vgzyyfhnendriyrhakkp.supabase.co".into()),
-        },
-        FlagEntry {
-            env: "SUPABASE_ANON_KEY".into(),
-            aliases: vec!["supabase-anon-key".into()],
-            short: None,
-            default_val: None,
-        },
-        FlagEntry {
-            env: "OPENWEATHER_API_KEY".into(),
-            aliases: vec!["openweather-api-key".into(), "owm-key".into()],
-            short: Some("w".into()),
-            default_val: None,
-        },
-        FlagEntry {
-            env: "OPEN_METEO_BASE_URL".into(),
-            aliases: vec!["open-meteo-base-url".into()],
-            short: None,
-            default_val: Some("https://api.open-meteo.com/v1/forecast".into()),
-        },
-        FlagEntry {
-            env: "OPEN_METEO_API_KEY".into(),
-            aliases: vec!["open-meteo-api-key".into()],
-            short: None,
-            default_val: None,
-        },
-        FlagEntry {
-            env: "FINNHUB_API_KEY".into(),
-            aliases: vec!["finnhub-api-key".into()],
-            short: Some("f".into()),
-            default_val: None,
-        },
-        FlagEntry {
-            env: "NEWSAPI_KEY".into(),
-            aliases: vec!["newsapi-key".into(), "news-api-key".into()],
-            short: Some("n".into()),
-            default_val: None,
-        },
-        FlagEntry {
-            env: "GIT_REPO_PATH".into(),
-            aliases: vec!["git-repo".into(), "git-repo-path".into()],
-            short: None,
-            default_val: None,
-        },
-        FlagEntry {
-            env: "CONFIG_DIR".into(),
-            aliases: vec!["config-dir".into()],
-            short: None,
-            default_val: None,
-        },
-        FlagEntry {
-            env: "HAPPY_WAKEY_PLATFORM_URL".into(),
-            aliases: vec!["platform-url".into()],
-            short: None,
-            default_val: None,
-        },
-        FlagEntry {
-            env: "HAPPY_WAKEY_SHARED_AUTH_URL".into(),
-            aliases: vec!["shared-auth-url".into()],
-            short: None,
-            default_val: None,
-        },
-        FlagEntry {
-            env: "HAPPY_WAKEY_GATEWAY_URL".into(),
-            aliases: vec!["happy-wakey-gateway-url".into()],
-            short: None,
-            default_val: None,
-        },
-    ]
-}
-
-// ---------------------------------------------------------------------------
-// Simple flag parser
-// ---------------------------------------------------------------------------
-
-/// Map of alias → value (kebab-case, no leading dashes)
-type ParsedFlags = HashMap<String, String>;
-
-fn parse_flags(args: &[String]) -> ParsedFlags {
-    let mut map = HashMap::new();
-    let mut i = 0;
-    while i < args.len() {
-        let arg = &args[i];
-
-        if let Some(name) = arg.strip_prefix("--") {
-            // --flag=value
-            if let Some(eq) = name.find('=') {
-                let value = &name[eq + 1..];
-                map.insert(name[..eq].to_string(), value.to_string());
-                i += 1;
-                continue;
-            }
-            // --flag value (next arg)
-            if i + 1 < args.len() && !args[i + 1].starts_with('-') {
-                map.insert(name.to_string(), args[i + 1].clone());
-                i += 2;
-                continue;
-            }
-            // --bool-flag (no value)
-            map.insert(name.to_string(), "true".to_string());
-            i += 1;
-            continue;
+fn find_config() -> Result<PathBuf> {
+    if let Some(explicit) = std::env::var_os("FLAGS2ENV_CONFIG") {
+        let path = PathBuf::from(explicit);
+        if path.is_file() {
+            return Ok(path);
         }
-
-        if arg.starts_with('-') && !arg.starts_with("--") && arg.len() == 2 {
-            let short = &arg[1..2];
-            if i + 1 < args.len() && !args[i + 1].starts_with('-') {
-                map.insert(short.to_string(), args[i + 1].clone());
-                i += 2;
-                continue;
-            }
-            map.insert(short.to_string(), "true".to_string());
-            i += 1;
-            continue;
-        }
-
-        i += 1;
+        bail!("FLAGS2ENV_CONFIG does not name a readable file");
     }
-    map
-}
 
-fn resolve_flag(parsed: &ParsedFlags, entry: &FlagEntry) -> Option<String> {
-    // 1. Check long aliases
-    for alias in &entry.aliases {
-        if let Some(val) = parsed.get(alias) {
-            return Some(val.clone());
+    let mut candidates = Vec::new();
+    if let Ok(current) = std::env::current_dir() {
+        candidates.push(current.join(CONFIG_NAME));
+    }
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(directory) = executable.parent() {
+            candidates.push(directory.join(CONFIG_NAME));
+            candidates.push(directory.join("../Resources").join(CONFIG_NAME));
         }
     }
-    // 2. Check short
-    if let Some(ref short) = entry.short {
-        if let Some(val) = parsed.get(short) {
-            return Some(val.clone());
-        }
-    }
-    None
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(CONFIG_NAME));
+    candidates.into_iter().find(|candidate| candidate.is_file()).context(
+        ".cli-flags.toml was not found beside the app, in Resources, or in the working directory",
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn args(list: &[&str]) -> Vec<String> {
-        list.iter().map(|s| s.to_string()).collect()
+    fn strings(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
     }
 
     #[test]
-    fn parses_equals_space_and_short_forms() {
-        let parsed = parse_flags(&args(&[
-            "happy-wakey",
-            "--supabase-anon-key=abc123",
-            "--owm-key",
-            "weatherkey",
-            "-f",
-            "finnkey",
-            "positional-ignored",
-        ]));
+    fn canonical_schema_executes_through_flags2env() {
+        let parser = BundledFlags2Env::new();
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(CONFIG_NAME);
+        parser.audit_config(path.to_str()).unwrap();
+        let values = parse(
+            &parser,
+            &strings(&[
+                "happy-wakey",
+                "--platform-url",
+                "https://platform.example.test",
+                "--config-dir=/tmp/happy-wakey-test",
+            ]),
+            &path,
+        )
+        .unwrap();
         assert_eq!(
-            parsed.get("supabase-anon-key").map(String::as_str),
-            Some("abc123")
+            values.get("HAPPY_WAKEY_PLATFORM_URL").map(String::as_str),
+            Some("https://platform.example.test")
         );
         assert_eq!(
-            parsed.get("owm-key").map(String::as_str),
-            Some("weatherkey")
+            values.get("CONFIG_DIR").map(String::as_str),
+            Some("/tmp/happy-wakey-test")
         );
-        assert_eq!(parsed.get("f").map(String::as_str), Some("finnkey"));
-        assert!(!parsed.contains_key("positional-ignored"));
     }
 
     #[test]
-    fn bare_long_flag_becomes_true() {
-        let parsed = parse_flags(&args(&["happy-wakey", "--verbose"]));
-        assert_eq!(parsed.get("verbose").map(String::as_str), Some("true"));
-    }
-
-    #[test]
-    fn empty_value_after_equals_is_preserved() {
-        let parsed = parse_flags(&args(&["happy-wakey", "--newsapi-key="]));
-        assert_eq!(parsed.get("newsapi-key").map(String::as_str), Some(""));
-    }
-
-    #[test]
-    fn resolve_flag_checks_aliases_then_short() {
-        let entry = FlagEntry {
-            env: "OPENWEATHER_API_KEY".into(),
-            aliases: vec!["openweather-api-key".into(), "owm-key".into()],
-            short: Some("w".into()),
-            default_val: None,
-        };
-
-        let mut by_alias = ParsedFlags::new();
-        by_alias.insert("owm-key".into(), "from-alias".into());
-        assert_eq!(
-            resolve_flag(&by_alias, &entry).as_deref(),
-            Some("from-alias")
-        );
-
-        let mut by_short = ParsedFlags::new();
-        by_short.insert("w".into(), "from-short".into());
-        assert_eq!(
-            resolve_flag(&by_short, &entry).as_deref(),
-            Some("from-short")
-        );
-
-        assert_eq!(resolve_flag(&ParsedFlags::new(), &entry), None);
-    }
-
-    #[test]
-    fn builtin_flags_are_well_formed() {
-        // Every flag must have a unique env var name.
-        let flags = builtin_flags();
-        let mut envs: Vec<&str> = flags.iter().map(|f| f.env.as_str()).collect();
-        envs.sort();
-        let count = envs.len();
-        envs.dedup();
-        assert_eq!(envs.len(), count, "duplicate env var in builtin_flags");
+    fn secret_shaped_cli_options_fail_without_echoing_values() {
+        let parser = BundledFlags2Env::new();
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(CONFIG_NAME);
+        let error = parse(
+            &parser,
+            &strings(&["happy-wakey", "--newsapi-key=do-not-print-this"]),
+            &path,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("1 unknown option"));
+        assert!(!error.contains("do-not-print-this"));
     }
 }

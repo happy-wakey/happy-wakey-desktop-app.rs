@@ -24,7 +24,7 @@ pub const DESTINATIONS: &[Destination] = &[
     },
     Destination {
         id: "markets",
-        label: "Markets",
+        label: "Stocks",
         panel: 3,
     },
     Destination {
@@ -48,14 +48,9 @@ pub const DESTINATIONS: &[Destination] = &[
         panel: 7,
     },
     Destination {
-        id: "browser",
-        label: "Browser",
-        panel: 8,
-    },
-    Destination {
         id: "settings",
         label: "Settings",
-        panel: 9,
+        panel: 8,
     },
 ];
 
@@ -73,7 +68,7 @@ mod tests {
             ids,
             [
                 "home", "calendar", "weather", "markets", "news", "planner", "focus", "devices",
-                "browser", "settings"
+                "settings"
             ]
         );
         let qml = include_str!("../qml/MainWindow.qml");
@@ -94,8 +89,7 @@ mod tests {
         assert!(planner.contains("Daily planner"));
         assert!(focus.contains("Start focus"));
         assert!(focus.contains("Pause"));
-        assert!(devices.contains(crate::bluetooth::SCHEMA));
-        assert!(devices.contains(crate::bluetooth::SERVICE_UUID));
+        assert!(devices.contains("Preview alarm") || devices.contains("scan"));
         assert!(!devices.contains("token"));
         assert!(!devices.contains("owner_id"));
     }

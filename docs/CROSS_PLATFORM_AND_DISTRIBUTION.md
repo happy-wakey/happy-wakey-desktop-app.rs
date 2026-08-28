@@ -4,11 +4,14 @@
 
 Happy Wakey is cross-platform by architecture, but macOS is the only platform verified in the current development pass.
 
-The source does not rely on a macOS-only UI framework. Qt abstracts windows, controls, graphics, input, accessibility, and WebEngine across platforms. Rust service and persistence code is portable. The remaining work is build automation, platform integration, packaging, and acceptance testing.
+The source does not rely on a macOS-only UI framework. Qt abstracts windows,
+controls, graphics, input, and accessibility across platforms; btleplug maps to
+CoreBluetooth, WinRT, and BlueZ. Rust service and persistence code is portable.
 
 ## Build Model
 
-Build one release on each target operating system. Do not treat Qt WebEngine as a simple cross-compile target.
+Build one release on each target operating system so native UI, BLE permissions,
+and packaging can be verified on the real target.
 
 | Target | Compiler/runtime | Qt deployment tool | Typical package |
 | --- | --- | --- | --- |
@@ -19,12 +22,12 @@ Build one release on each target operating system. Do not treat Qt WebEngine as 
 ## Shared Build Steps
 
 1. Install a supported Rust toolchain.
-2. Install Qt 6 with Quick, Controls, and WebEngine for the target architecture.
+2. Install Qt 6 with Quick and Controls for the target architecture.
 3. Make Qt discoverable to CMake/CXX-Qt (`PATH`, `CMAKE_PREFIX_PATH`, or platform tooling).
 4. Run `cargo test --locked`.
 5. Run `cargo build --release --locked`.
 6. Create the platform application/package structure.
-7. Copy/deploy Qt libraries, QML modules, plugins, WebEngine helper/resources, and locales.
+7. Copy/deploy Qt libraries, QML modules, plugins, and locales.
 8. Sign the complete package.
 9. Run the installed artifact, not only the build-tree executable.
 10. Publish checksums and release metadata.
@@ -47,16 +50,21 @@ Recommended flow:
 
 1. Build a universal binary only if all Rust and Qt dependencies are available for both `arm64` and `x86_64`; otherwise publish architecture-specific builds.
 2. Create `Info.plist` with a stable bundle identifier such as `com.happywakey.app`.
-3. Run `macdeployqt` so Qt frameworks, plugins, QML, and WebEngine resources are present.
+3. Merge `deploy/macos/Info.plist` into the bundle metadata and run `macdeployqt`.
 4. Sign nested helpers/frameworks first and the outer application last with hardened runtime.
 5. Submit to Apple notarization and staple the result.
 6. Put the notarized app in a signed or notarized DMG.
 
-Release acceptance should verify OAuth loopback login, WebEngine startup, network access, config permissions, native notification delivery, and app relaunch from `/Applications`. The bundle identifier must match `HAPPY_WAKEY_BUNDLE_ID`; development QA used a registered temporary bundle to verify this path.
+Release acceptance should verify OAuth loopback login, Bluetooth permission and
+discovery, network access, config permissions, native notification delivery,
+and app relaunch from `/Applications`. The bundle identifier must match
+`HAPPY_WAKEY_BUNDLE_ID`.
 
 ## Windows
 
-Use the Rust MSVC target and a Qt build compiled for the same MSVC version and architecture. `windeployqt` should collect DLLs, platform plugins, QML modules, and WebEngine support files.
+Use the Rust MSVC target and a Qt build compiled for the same MSVC version and
+architecture. `windeployqt` should collect DLLs, platform plugins, and QML
+modules; acceptance must exercise the WinRT Bluetooth adapter.
 
 The installer should:
 
@@ -72,14 +80,15 @@ MSI via WiX is a strong default for managed environments. An installer EXE can p
 
 ## Linux
 
-Qt WebEngine makes a fully portable Linux bundle larger and more sensitive to sandbox/runtime details. Flatpak is the cleanest first production target because it defines a runtime and permissions. AppImage is useful as a direct-download option.
+Flatpak is the cleanest first production target because it defines a runtime
+and portal/BlueZ permissions. AppImage is useful as a direct-download option.
 
 Test at least:
 
 - Ubuntu LTS under Wayland and X11;
 - Fedora under Wayland;
 - a representative KDE environment;
-- WebEngine sandbox behavior;
+- BlueZ/DBus discovery and permission behavior;
 - desktop portal URL opening and notifications;
 - font and high-DPI behavior.
 
@@ -131,7 +140,7 @@ Do not add an updater that executes unsigned downloads. Until a signed updater e
 
 - [ ] Stable product name, bundle ID, icons, versioning, and license metadata
 - [ ] Release-mode tests on macOS, Windows, and Linux
-- [ ] Qt/WebEngine deployment verified outside the build tree
+- [ ] Qt and native Bluetooth deployment verified outside the build tree
 - [ ] macOS signing, hardened runtime, notarization, and DMG
 - [ ] Windows Authenticode signing and installer
 - [ ] Linux Flatpak/AppImage permissions and sandbox validation

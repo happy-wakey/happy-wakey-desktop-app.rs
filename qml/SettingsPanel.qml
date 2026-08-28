@@ -52,16 +52,19 @@ Rectangle {
                             Button {
                                 text: "Sign in with Google"
                                 visible: !Backend.logged_in
+                                enabled: !Backend.auth_busy
                                 onClicked: Backend.login("google")
                             }
                             Button {
                                 text: "Sign in with Apple"
                                 visible: !Backend.logged_in
+                                enabled: !Backend.auth_busy
                                 onClicked: Backend.login("apple")
                             }
                             Button {
                                 text: "Sign in with Microsoft"
                                 visible: !Backend.logged_in
+                                enabled: !Backend.auth_busy
                                 onClicked: Backend.login("microsoft")
                             }
                             Button {
@@ -321,9 +324,9 @@ Rectangle {
                     }
                 }
 
-                // ---- Bookmarks (Quick Browser URLs) ----
+                // ---- External Quick Links ----
                 SectionBox {
-                    title: "Browser Bookmarks"
+                    title: "External Quick Links"
                     Layout.fillWidth: true
 
                     ColumnLayout {

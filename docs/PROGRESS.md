@@ -1,17 +1,21 @@
 # Progress
 
-Status date: July 29, 2026
+Status date: August 25, 2026
 
 ## Current Product State
 
-Happy Wakey is a working native Rust and Qt desktop prototype with a cohesive dashboard, onboarding, local configuration, Supabase-backed authentication/sync foundations, external data panels, and an embedded browser. It is beyond a static mockup, but it is not yet a production-ready signed application.
+Happy Wakey is a working native Rust and Qt desktop prototype with a cohesive
+dashboard, onboarding, local configuration, Supabase-backed authentication/sync
+foundations, external data panels, and native Bluetooth alarm-device support.
+It has no embedded browser or webview. It is beyond a static mockup, but it is
+not yet a production-ready signed application.
 
 ## Capability Matrix
 
 | Area | Status | Current behavior |
 | --- | --- | --- |
 | Native desktop shell | Working | Qt 6 application window with QML navigation and panels |
-| Home dashboard | Working | Preview cards for calendar, weather, stocks, news, browser, and setup |
+| Home dashboard | Working | Preview cards for calendar, weather, stocks, news, Bluetooth devices, and setup |
 | Light daytime theme | Working | Light theme, with a softer low-brightness palette from 5:00 AM to 8:00 AM |
 | Onboarding | Working | Five-step flow with local persistence and Supabase sync after login |
 | Onboarding controls | Live-tested | Continue and Open Dashboard complete the flow and persist completion |
@@ -27,7 +31,8 @@ Happy Wakey is a working native Rust and Qt desktop prototype with a cohesive da
 | Weather provider | Working | Open-Meteo is primary; OpenWeather is an optional fallback |
 | Stocks/watchlist | Implemented, key required | Up to 20 Finnhub symbols, one quote request per symbol |
 | News | Implemented, key required | NewsAPI query followed by local keyword enforcement, URL validation, deduplication, and a five-item cap |
-| In-app browser | Working | Qt WebEngine tabs, URL normalization, duplicate URL prevention, and bookmark opening |
+| Bluetooth devices | Implemented, hardware acceptance pending | Native filtered BLE scan, connect/disconnect, and versioned bounded preview-alarm write |
+| External links | Working | HTTP/HTTPS validation followed by system-browser launch; no embedded webview |
 | Local configuration | Working | Sanitized JSON with atomic replacement and restrictive Unix permissions |
 | Supabase config mirror | Partial | Saves a redacted config snapshot; broader remote config hydration is not wired into startup |
 | Supabase onboarding state | Working in code | Dedicated table and per-user REST reads/upserts; live project access still requires credentials |
@@ -95,7 +100,8 @@ Finnhub, NewsAPI, authenticated Supabase calls, and end-to-end cloud reminder de
 4. Git backup needs a real repository lifecycle and conflict policy.
 5. Supabase should hydrate the redacted config snapshot at startup and define field-level merge semantics.
 6. News and market providers need cache/refresh policies and optional alternate providers.
-7. The browser needs history/session persistence, crash recovery, download policy, and stronger navigation controls.
+7. Bluetooth needs real Happy Wakey peripheral firmware fixtures and physical
+   CoreBluetooth, WinRT, and BlueZ acceptance evidence.
 8. QML should be moved toward bound components and qualified references to remove `qmllint` warnings.
 9. Windows and Linux builds need real CI and installer acceptance tests.
 10. Production builds need signing, notarization, update delivery, telemetry/privacy decisions, and crash reporting.

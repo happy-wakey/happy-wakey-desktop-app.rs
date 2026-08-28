@@ -319,7 +319,8 @@ pub fn merge_editable_config(mut current: Config, incoming: Config) -> Config {
     current.browser_bookmarks = incoming.browser_bookmarks;
     current.git_repo_path = incoming.git_repo_path;
     current.supabase_sync_enabled = incoming.supabase_sync_enabled;
-    current.onboarding = incoming.onboarding;
+    // Onboarding is control state. It may only change through AppMachine's
+    // explicit transitions, never through a stale or user-edited config blob.
     current.reminder_settings = incoming.reminder_settings;
     current.tasks = incoming.tasks;
     current.focus_minutes = incoming.focus_minutes;
@@ -631,6 +632,12 @@ mod tests {
             ..Default::default()
         });
         incoming.stock_symbols = vec!["TSLA".into()];
+        incoming.onboarding = OnboardingState {
+            completed: true,
+            current_step: ONBOARDING_STEP_COMPLETE.into(),
+            step_index: 4,
+            updated_at: Some("2099-01-01T00:00:00Z".into()),
+        };
 
         let merged = merge_editable_config(current, incoming);
         assert_eq!(merged.user_id, "user-123");
@@ -638,6 +645,8 @@ mod tests {
         assert_eq!(session.access_token, "keep-me");
         assert_eq!(session.provider_token.as_deref(), Some("g-token"));
         assert_eq!(merged.stock_symbols, vec!["TSLA".to_string()]);
+        assert!(!merged.onboarding.completed);
+        assert_eq!(merged.onboarding.current_step, ONBOARDING_STEP_WELCOME);
     }
 
     #[test]

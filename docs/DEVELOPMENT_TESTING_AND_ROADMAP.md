@@ -3,13 +3,14 @@
 ## Repository
 
 ```text
-/Users/maca5/codes/happy-wakey/happy-wakey.rs
+/Users/maca5/codes/happy-wakey/happy-wakey-desktop-app.rs
 ```
 
 ## Prerequisites
 
 - Rust toolchain compatible with the dependency lockfile;
-- Qt 6 with Quick, Controls, and WebEngine;
+- Qt 6 with Quick and Controls;
+- CoreBluetooth, WinRT Bluetooth, or BlueZ/DBus for native BLE acceptance;
 - a C++ compiler supported by the installed Qt build;
 - platform deployment/signing tools for release packages.
 
@@ -106,7 +107,8 @@ Test the built desktop executable, not only QML source:
 5. Open every panel from the sidebar.
 6. Trigger refresh twice quickly and verify only one request sweep runs.
 7. Verify empty, loading, success, partial failure, and total failure states.
-8. Open multiple browser tabs and confirm duplicate URL prevention.
+8. Scan for a fixture peripheral, connect, send a preview alarm, disconnect,
+   and confirm no credential appears in the GATT payload.
 9. Restart and verify configuration persistence.
 10. Send a test reminder, change reminder offsets, restart, and verify both native delivery and persisted settings.
 11. After sign-in, enable cloud email reminders, refresh Calendar, verify the pending count, and use Test cloud email.
@@ -137,7 +139,7 @@ Test the built desktop executable, not only QML source:
 - Add macOS app bundle, signing, notarization, and DMG scripts.
 - Add Windows deployment and signed MSI/installer.
 - Add Linux Flatpak manifest and AppImage fallback.
-- Add installed-artifact smoke tests for Qt WebEngine resources.
+- Add installed-artifact Bluetooth permission and fixture-device smoke tests.
 
 ### P1: Daily-Use Quality
 

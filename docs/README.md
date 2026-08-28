@@ -2,7 +2,7 @@
 
 This directory documents the product and the implementation in:
 
-`/Users/maca5/codes/happy-wakey/happy-wakey.rs`
+`/Users/maca5/codes/happy-wakey/happy-wakey-desktop-app.rs`
 
 The documents describe the code as it exists on July 16, 2026. Planned features are labeled explicitly so they are not confused with shipped behavior.
 
@@ -20,8 +20,16 @@ The documents describe the code as it exists on July 16, 2026. Planned features 
 
 ## Short Answer
 
-Happy Wakey is a native desktop application, not a browser shell. Rust owns application state, configuration, authentication, network calls, and service integration. Qt 6 Quick/QML renders the interface. `cxx-qt` generates the typed bridge between Rust and Qt. Qt WebEngine is used only for the in-app browser panel.
+Happy Wakey is a native desktop application, not a browser shell. Rust owns
+application state, configuration, authentication, network calls, native BLE,
+and service integration. Qt 6 Quick/QML renders the interface and `cxx-qt`
+generates the typed bridge between Rust and Qt. There is no embedded browser or
+webview; safe HTTP/HTTPS links open in the system browser.
 
-The architecture is cross-platform across macOS, Windows, and Linux because Rust, Qt 6, QML, CXX-Qt, Reqwest, and Qt WebEngine support those platforms. The application must still be compiled and packaged separately on each target operating system because it links to that platform's Qt runtime and native windowing stack.
+The architecture is cross-platform across macOS, Windows, and Linux because
+Rust, Qt 6, QML, CXX-Qt, Reqwest, and btleplug support those platforms. The
+application must still be compiled and packaged separately on each target
+operating system because it links to that platform's Qt runtime, Bluetooth
+stack, and native windowing stack.
 
 The current repository builds and runs on macOS. Production installers, signing, notarization, Windows/Linux release validation, native notification support, and automatic Git backup are still roadmap items.
