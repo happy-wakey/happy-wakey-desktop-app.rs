@@ -45,7 +45,7 @@ type = "string"
 env = "HAPPY_WAKEY_PLATFORM_URL"
 aliases = ["platform-url"]
 type = "string"
-default = "https://98.90.186.114"
+default = ""
 
 [flags.shared_auth_url]
 env = "HAPPY_WAKEY_SHARED_AUTH_URL"

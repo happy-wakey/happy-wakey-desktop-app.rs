@@ -24,6 +24,8 @@ pub struct Config {
     pub supabase_sync_enabled: bool,
     pub onboarding: OnboardingState,
     pub reminder_settings: ReminderSettings,
+    pub tasks: Vec<DailyTask>,
+    pub focus_minutes: u16,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -61,6 +63,14 @@ pub struct Bookmark {
     pub id: String,
     pub title: String,
     pub url: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DailyTask {
+    pub id: String,
+    pub title: String,
+    pub completed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,6 +150,8 @@ impl Default for Config {
             supabase_sync_enabled: true,
             onboarding: OnboardingState::default(),
             reminder_settings: ReminderSettings::default(),
+            tasks: Vec::new(),
+            focus_minutes: 25,
         }
     }
 }
@@ -279,6 +291,13 @@ pub fn sanitize(mut config: Config) -> Config {
 
     config.onboarding = sanitize_onboarding_state(config.onboarding);
     config.reminder_settings = sanitize_reminder_settings(config.reminder_settings);
+    config.tasks = config
+        .tasks
+        .into_iter()
+        .filter_map(sanitize_task)
+        .take(100)
+        .collect();
+    config.focus_minutes = config.focus_minutes.clamp(5, 120);
     config
 }
 
@@ -303,6 +322,8 @@ pub fn merge_editable_config(mut current: Config, incoming: Config) -> Config {
     // Onboarding is control state. It may only change through AppMachine's
     // explicit transitions, never through a stale or user-edited config blob.
     current.reminder_settings = incoming.reminder_settings;
+    current.tasks = incoming.tasks;
+    current.focus_minutes = incoming.focus_minutes;
     sanitize(current)
 }
 
@@ -379,6 +400,18 @@ fn sanitize_bookmark(bookmark: Bookmark) -> Option<Bookmark> {
     })
 }
 
+fn sanitize_task(task: DailyTask) -> Option<DailyTask> {
+    let title = clean_text(&task.title, 160);
+    if title.is_empty() {
+        return None;
+    }
+    Some(DailyTask {
+        id: clean_text(&task.id, 64),
+        title,
+        completed: task.completed,
+    })
+}
+
 fn sanitize_calendar_provider(mut provider: CalendarProvider) -> CalendarProvider {
     provider.provider = clean_text(&provider.provider, 64);
     provider.email = clean_text(&provider.email, 254);
@@ -431,7 +464,7 @@ fn normalize_http_url(raw: &str) -> Option<String> {
     }
 
     let parsed = url::Url::parse(&input).ok()?;
-    if !matches!(parsed.scheme(), "https" | "http") || parsed.host_str().is_none() {
+    if parsed.host_str().is_none() || !crate::url_safety::is_safe_http_url(&parsed) {
         return None;
     }
 
@@ -543,11 +576,41 @@ mod tests {
             normalize_http_url("example.com").as_deref(),
             Some("https://example.com/")
         );
-        assert!(normalize_http_url("http://example.com").is_some());
+        assert!(normalize_http_url("http://example.com").is_none());
+        assert!(normalize_http_url("http://127.0.0.1:8080").is_some());
+        assert!(normalize_http_url("https://98.90.186.114").is_none());
         assert!(normalize_http_url("ftp://example.com").is_none());
         assert!(normalize_http_url("javascript:alert(1)").is_none());
         assert!(normalize_http_url("   ").is_none());
         assert!(normalize_http_url(&format!("https://{}", "a".repeat(3000))).is_none());
+    }
+
+    #[test]
+    fn sanitize_keeps_planner_and_drops_unsafe_bookmarks() {
+        let mut config = Config::default();
+        config.tasks = vec![
+            DailyTask {
+                id: "blank".into(),
+                title: "   ".into(),
+                completed: false,
+            },
+            DailyTask {
+                id: "keep".into(),
+                title: " Write tests ".into(),
+                completed: true,
+            },
+        ];
+        config.focus_minutes = 999;
+        config.browser_bookmarks = vec![Bookmark {
+            id: "xss".into(),
+            title: "Nope".into(),
+            url: "javascript:alert(1)".into(),
+        }];
+        let sanitized = sanitize(config);
+        assert_eq!(sanitized.tasks.len(), 1);
+        assert_eq!(sanitized.tasks[0].title, "Write tests");
+        assert_eq!(sanitized.focus_minutes, 120);
+        assert!(sanitized.browser_bookmarks.is_empty());
     }
 
     #[test]

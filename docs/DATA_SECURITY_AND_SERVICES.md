@@ -17,10 +17,11 @@ The local JSON schema includes:
 - up to five weather locations;
 - up to twenty stock symbols;
 - up to twenty news keywords;
-- up to fifty browser bookmarks;
+- up to fifty browser bookmarks (HTTPS or loopback HTTP);
 - Git repository/path setting;
 - Supabase sync toggle;
 - local and cloud reminder settings;
+- planner tasks and focus duration;
 - onboarding state.
 
 Configuration is sanitized before save. The file is written to a temporary sibling, flushed, synchronized, and renamed into place. On Unix, mode `0600` restricts access to the current user.

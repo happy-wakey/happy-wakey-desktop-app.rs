@@ -244,7 +244,7 @@ Rectangle {
                     detail: "Native BLE control for Happy Wakey alarm hardware"
                     model: bluetoothPreviewModel
                     emptyText: "Open Devices to scan for compatible peripherals."
-                    onOpen: root.navigate(5)
+                    onOpen: root.navigate(7)
                     onRefresh: Backend.scan_bluetooth()
                 }
 
@@ -289,7 +289,7 @@ Rectangle {
                         Button {
                             text: "Open Settings"
                             Layout.alignment: Qt.AlignRight
-                            onClicked: root.navigate(6)
+                            onClicked: root.navigate(8)
                         }
                     }
                 }

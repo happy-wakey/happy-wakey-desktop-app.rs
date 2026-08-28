@@ -1,6 +1,7 @@
 mod app_state;
 mod bluetooth;
 mod config;
+mod destinations;
 mod env_config;
 mod gateway;
 mod http;
@@ -8,6 +9,7 @@ mod reminders;
 mod services;
 mod supabase;
 mod supabase_config;
+mod url_safety;
 
 use app_state::{
     AppMachine, AuthPhase, Event as StateEvent, Lane, OnboardingStep, OperationToken, Provider,
@@ -208,6 +210,7 @@ impl qobject::Backend {
     /// Called once from MainWindow.qml on completion: pull onboarding state from
     /// Supabase (if signed in) and merge it in.
     fn startup(mut self: Pin<&mut Self>) {
+        let _ = desktop_parity_witness();
         if !dispatch_machine(self.as_mut(), StateEvent::StartupCompleted).committed() {
             emit_status(
                 self,
@@ -756,6 +759,20 @@ fn emit_status(mut b: Pin<&mut Backend>, msg: String) {
 
 fn json_qstring<T: serde::Serialize>(value: &T) -> QString {
     QString::from(serde_json::to_string(value).unwrap_or_default().as_str())
+}
+
+fn desktop_parity_witness() -> usize {
+    assert_eq!(destinations::DESTINATIONS.len(), 9);
+    let encoded = bluetooth::encode_preview_alarm_command("018f5cc6-6d8b-7b2a-9f38-269e6a7b1f11")
+        .expect("fixture BLE operation id");
+    destinations::DESTINATIONS.len()
+        + bluetooth::SERVICE_UUID_STR.len()
+        + bluetooth::COMMAND_UUID_STR.len()
+        + bluetooth::SCHEMA.len()
+        + bluetooth::ACTION.len()
+        + bluetooth::DURATION_MS as usize
+        + bluetooth::MAX_COMMAND_BYTES
+        + encoded.len()
 }
 
 fn serialize_ui_config(config: &config::Config) -> QString {

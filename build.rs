@@ -17,6 +17,8 @@ fn main() {
                 "qml/WeatherPanel.qml",
                 "qml/StocksPanel.qml",
                 "qml/NewsPanel.qml",
+                "qml/PlannerPanel.qml",
+                "qml/FocusPanel.qml",
                 "qml/DevicesPanel.qml",
                 "qml/SettingsPanel.qml",
                 "qml/OnboardingPanel.qml",

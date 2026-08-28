@@ -86,8 +86,10 @@ ApplicationWindow {
                         { icon: "🌤", label: "Weather",      panel: 2 },
                         { icon: "📈", label: "Stocks",       panel: 3 },
                         { icon: "📰", label: "News",         panel: 4 },
-                        { icon: "◉",  label: "Devices",      panel: 5 },
-                        { icon: "⚙",  label: "Settings",     panel: 6 },
+                        { icon: "✓",  label: "Planner",      panel: 5 },
+                        { icon: "⏱", label: "Focus",        panel: 6 },
+                        { icon: "◉",  label: "Devices",      panel: 7 },
+                        { icon: "⚙",  label: "Settings",     panel: 8 },
                     ]
 
                     ItemDelegate {
@@ -139,6 +141,8 @@ ApplicationWindow {
                 WeatherPanel { theme: theme }
                 StocksPanel { theme: theme }
                 NewsPanel { theme: theme }
+                PlannerPanel { theme: theme }
+                FocusPanel { theme: theme }
                 DevicesPanel { theme: theme }
                 SettingsPanel { theme: theme }
             }

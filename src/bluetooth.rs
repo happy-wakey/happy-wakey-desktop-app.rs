@@ -13,11 +13,17 @@ use btleplug::{
 use serde::Serialize;
 use uuid::Uuid;
 
+pub const SERVICE_UUID_STR: &str = "8e0e0001-7d5a-4c3f-9c31-94e9d447fc01";
+pub const COMMAND_UUID_STR: &str = "8e0e0002-7d5a-4c3f-9c31-94e9d447fc01";
+pub const SCHEMA: &str = "happy-wakey.ble.preview-command.v1";
+pub const ACTION: &str = "preview_alarm";
+pub const DURATION_MS: u32 = 3000;
+pub const MAX_COMMAND_BYTES: usize = 512;
+
 const SERVICE_UUID: Uuid = Uuid::from_u128(0x8e0e_0001_7d5a_4c3f_9c31_94e9_d447_fc01);
 const COMMAND_UUID: Uuid = Uuid::from_u128(0x8e0e_0002_7d5a_4c3f_9c31_94e9_d447_fc01);
 const SCAN_TIME: Duration = Duration::from_secs(4);
 const CONNECT_TIME: Duration = Duration::from_secs(8);
-const MAX_COMMAND_BYTES: usize = 512;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct DeviceSummary {
@@ -240,15 +246,19 @@ fn validate_device_id(device_id: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub fn encode_preview_alarm_command(operation_id: &str) -> Result<Vec<u8>, String> {
+    preview_payload(operation_id)
+}
+
 fn preview_payload(operation_id: &str) -> Result<Vec<u8>, String> {
     let operation_id = Uuid::parse_str(operation_id)
         .map_err(|_| "Bluetooth operation identifier must be a UUID".to_string())?;
     let operation_id = operation_id.to_string();
     let payload = serde_json::to_vec(&PreviewCommand {
-        schema: "happy-wakey.ble.preview-command.v1",
+        schema: SCHEMA,
         operation_id: &operation_id,
-        action: "preview_alarm",
-        duration_ms: 3_000,
+        action: ACTION,
+        duration_ms: DURATION_MS as u16,
     })
     .map_err(|error| format!("serialize Bluetooth command: {error}"))?;
     if payload.len() > MAX_COMMAND_BYTES {
@@ -280,5 +290,20 @@ mod tests {
         assert!(validate_device_id(" device ").is_err());
         assert!(validate_device_id("device\n2").is_err());
         assert!(validate_device_id(&"x".repeat(257)).is_err());
+    }
+
+    #[test]
+    fn preview_command_rejects_malformed_operation_identifiers() {
+        assert!(encode_preview_alarm_command("not-an-operation-id").is_err());
+        assert!(encode_preview_alarm_command("").is_err());
+        assert!(encode_preview_alarm_command("018f5cc6-6d8b-7b2a-9f38-269e6a7b1f1").is_err());
+        let bytes = encode_preview_alarm_command("018F5CC6-6D8B-7B2A-9F38-269E6A7B1F11").unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            value["operation_id"],
+            "018f5cc6-6d8b-7b2a-9f38-269e6a7b1f11"
+        );
+        assert_eq!(SERVICE_UUID_STR.len(), 36);
+        assert_eq!(COMMAND_UUID_STR.len(), 36);
     }
 }

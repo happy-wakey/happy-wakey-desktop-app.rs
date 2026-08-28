@@ -22,7 +22,7 @@ pub fn shared_client() -> &'static Client {
             .user_agent(concat!(
                 "happy-wakey/",
                 env!("CARGO_PKG_VERSION"),
-                " (+https://github.com/ORESoftware/happy-wakey.rs)"
+                " (+https://github.com/happy-wakey/happy-wakey-desktop-app.rs)"
             ))
             .build()
             .expect("failed to build the shared HTTP client")
