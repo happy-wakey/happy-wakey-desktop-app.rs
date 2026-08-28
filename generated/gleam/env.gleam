@@ -4,17 +4,33 @@ pub const service = "happy-wakey-desktop-app"
 
 pub const config_dir = "CONFIG_DIR"
 
+pub const finnhub_api_key = "FINNHUB_API_KEY"
+
+pub const flags2env_config = "FLAGS2ENV_CONFIG"
+
 pub const gateway_url = "HAPPY_WAKEY_GATEWAY_URL"
 
 pub const git_repo_path = "GIT_REPO_PATH"
 
+pub const happy_wakey_bundle_id = "HAPPY_WAKEY_BUNDLE_ID"
+
+pub const happy_wakey_oauth_port = "HAPPY_WAKEY_OAUTH_PORT"
+
+pub const newsapi_key = "NEWSAPI_KEY"
+
+pub const open_meteo_api_key = "OPEN_METEO_API_KEY"
+
 pub const open_meteo_base_url = "OPEN_METEO_BASE_URL"
 pub const open_meteo_base_url_default = "https://api.open-meteo.com/v1/forecast"
+
+pub const openweather_api_key = "OPENWEATHER_API_KEY"
 
 pub const platform_url = "HAPPY_WAKEY_PLATFORM_URL"
 pub const platform_url_default = "https://98.90.186.114"
 
 pub const shared_auth_url = "HAPPY_WAKEY_SHARED_AUTH_URL"
+
+pub const supabase_anon_key = "SUPABASE_ANON_KEY"
 
 pub const supabase_url = "SUPABASE_URL"
 pub const supabase_url_default = "https://vgzyyfhnendriyrhakkp.supabase.co"
@@ -22,11 +38,19 @@ pub const supabase_url_default = "https://vgzyyfhnendriyrhakkp.supabase.co"
 pub type DesktopEnv {
   DesktopEnv(
     config_dir: String,
+    finnhub_api_key: String,
+    flags2env_config: String,
     gateway_url: String,
     git_repo_path: String,
+    happy_wakey_bundle_id: String,
+    happy_wakey_oauth_port: String,
+    newsapi_key: String,
+    open_meteo_api_key: String,
     open_meteo_base_url: String,
+    openweather_api_key: String,
     platform_url: String,
     shared_auth_url: String,
+    supabase_anon_key: String,
     supabase_url: String,
   )
 }

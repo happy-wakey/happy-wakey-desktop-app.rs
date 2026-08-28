@@ -5,11 +5,19 @@
 #[derive(Clone, Debug, PartialEq)]
 pub struct DesktopEnvValues {
     pub config_dir: Option<String>,
+    pub finnhub_api_key: Option<String>,
+    pub flags2env_config: Option<String>,
     pub gateway_url: Option<String>,
     pub git_repo_path: Option<String>,
+    pub happy_wakey_bundle_id: Option<String>,
+    pub happy_wakey_oauth_port: Option<String>,
+    pub newsapi_key: Option<String>,
+    pub open_meteo_api_key: Option<String>,
     pub open_meteo_base_url: String,
+    pub openweather_api_key: Option<String>,
     pub platform_url: String,
     pub shared_auth_url: Option<String>,
+    pub supabase_anon_key: Option<String>,
     pub supabase_url: String,
 }
 
@@ -17,11 +25,19 @@ pub struct DesktopEnvValues {
 pub fn load_from(lookup: impl Fn(&str) -> Option<String>) -> DesktopEnvValues {
     DesktopEnvValues {
         config_dir: lookup("CONFIG_DIR").filter(|value| !value.is_empty()),
+        finnhub_api_key: lookup("FINNHUB_API_KEY").filter(|value| !value.is_empty()),
+        flags2env_config: lookup("FLAGS2ENV_CONFIG").filter(|value| !value.is_empty()),
         gateway_url: lookup("HAPPY_WAKEY_GATEWAY_URL").filter(|value| !value.is_empty()),
         git_repo_path: lookup("GIT_REPO_PATH").filter(|value| !value.is_empty()),
+        happy_wakey_bundle_id: lookup("HAPPY_WAKEY_BUNDLE_ID").filter(|value| !value.is_empty()),
+        happy_wakey_oauth_port: lookup("HAPPY_WAKEY_OAUTH_PORT").filter(|value| !value.is_empty()),
+        newsapi_key: lookup("NEWSAPI_KEY").filter(|value| !value.is_empty()),
+        open_meteo_api_key: lookup("OPEN_METEO_API_KEY").filter(|value| !value.is_empty()),
         open_meteo_base_url: lookup("OPEN_METEO_BASE_URL").filter(|value| !value.is_empty()).unwrap_or_else(|| "https://api.open-meteo.com/v1/forecast".to_string()),
+        openweather_api_key: lookup("OPENWEATHER_API_KEY").filter(|value| !value.is_empty()),
         platform_url: lookup("HAPPY_WAKEY_PLATFORM_URL").filter(|value| !value.is_empty()).unwrap_or_else(|| "https://98.90.186.114".to_string()),
         shared_auth_url: lookup("HAPPY_WAKEY_SHARED_AUTH_URL").filter(|value| !value.is_empty()),
+        supabase_anon_key: lookup("SUPABASE_ANON_KEY").filter(|value| !value.is_empty()),
         supabase_url: lookup("SUPABASE_URL").filter(|value| !value.is_empty()).unwrap_or_else(|| "https://vgzyyfhnendriyrhakkp.supabase.co".to_string()),
     }
 }
@@ -45,4 +61,197 @@ fn parse_int(raw: Option<String>, default: i64) -> i64 {
 
 fn parse_float(raw: Option<String>, default: f64) -> f64 {
     raw.and_then(|value| value.parse().ok()).unwrap_or(default)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingEnv {
+    pub name: &'static str,
+    pub expected_type: &'static str,
+    pub examples: &'static [&'static str],
+}
+
+impl std::fmt::Display for MissingEnv {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "missing required environment variable {}\n  expected type: {}\n  examples: {}", self.name, self.expected_type, self.examples.join(", "))
+    }
+}
+
+impl std::error::Error for MissingEnv {}
+
+fn nonempty(raw: Option<&str>) -> Option<String> {
+    raw.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
+}
+
+fn require_env(
+    name: &'static str,
+    expected_type: &'static str,
+    examples: &'static [&'static str],
+    value: Option<String>,
+) -> Result<String, MissingEnv> {
+    match nonempty(value.as_deref()) {
+        Some(value) => Ok(value),
+        None => Err(MissingEnv {
+            name,
+            expected_type,
+            examples,
+        }),
+    }
+}
+
+fn pick(
+    keys: &[&str],
+    order: &[&str],
+    shell: &std::collections::BTreeMap<String, String>,
+    dotenv: &std::collections::BTreeMap<String, String>,
+    flags: &std::collections::BTreeMap<String, String>,
+    default: Option<&str>,
+) -> Option<String> {
+    for source in order {
+        let map = match *source {
+            "flags" => flags,
+            "env_file" => dotenv,
+            _ => shell,
+        };
+        for key in keys {
+            if let Some(value) = nonempty(map.get(*key).map(String::as_str)) {
+                return Some(value);
+            }
+        }
+    }
+    nonempty(default)
+}
+
+fn unquote(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.len() >= 2 {
+        let bytes = trimmed.as_bytes();
+        if (bytes[0] == b'"' && bytes[trimmed.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[trimmed.len() - 1] == b'\'')
+        {
+            return trimmed[1..trimmed.len() - 1].to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
+fn parse_dotenv(text: &str) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::new();
+    for raw in text.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let line = line.strip_prefix("export ").map(str::trim).unwrap_or(line);
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        if key.is_empty() {
+            continue;
+        }
+        let first = key.chars().next().unwrap_or('\0');
+        if !(first.is_ascii_alphabetic() || first == '_') {
+            continue;
+        }
+        out.insert(key.to_string(), unquote(value));
+    }
+    out
+}
+
+fn dotenv_enabled() -> bool {
+    match std::env::var("FLAGS2ENV_DOTENV") {
+        Ok(value) if matches!(value.trim(), "0" | "false" | "FALSE" | "no" | "NO") => false,
+        _ => true,
+    }
+}
+
+fn load_dotenv_files(files: &[&str]) -> std::collections::BTreeMap<String, String> {
+    if !dotenv_enabled() {
+        return std::collections::BTreeMap::new();
+    }
+    files.iter().fold(std::collections::BTreeMap::new(), |mut acc, path| {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            acc.extend(parse_dotenv(&text));
+        }
+        acc
+    })
+}
+
+fn shell_env() -> std::collections::BTreeMap<String, String> {
+    std::env::vars().collect()
+}
+
+/// Resolve env-key -> value. Empty values fall through to the next source.
+pub fn load_env_map(
+    shell: &std::collections::BTreeMap<String, String>,
+    dotenv: &std::collections::BTreeMap<String, String>,
+    flags: &std::collections::BTreeMap<String, String>,
+) -> Result<std::collections::BTreeMap<String, String>, MissingEnv> {
+    let mut out = std::collections::BTreeMap::new();
+    let config_dir = pick(&["CONFIG_DIR"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
+    if let Some(value) = config_dir {
+        out.insert("CONFIG_DIR".to_string(), value);
+    }
+    let finnhub_api_key = pick(&["FINNHUB_API_KEY"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
+    if let Some(value) = finnhub_api_key {
+        out.insert("FINNHUB_API_KEY".to_string(), value);
+    }
+    let flags2env_config = pick(&["FLAGS2ENV_CONFIG"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
+    if let Some(value) = flags2env_config {
+        out.insert("FLAGS2ENV_CONFIG".to_string(), value);
+    }
+    let gateway_url = pick(&["HAPPY_WAKEY_GATEWAY_URL"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
+    if let Some(value) = gateway_url {
+        out.insert("HAPPY_WAKEY_GATEWAY_URL".to_string(), value);
+    }
+    let git_repo_path = pick(&["GIT_REPO_PATH"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
+    if let Some(value) = git_repo_path {
+        out.insert("GIT_REPO_PATH".to_string(), value);
+    }
+    let happy_wakey_bundle_id = pick(&["HAPPY_WAKEY_BUNDLE_ID"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
+    if let Some(value) = happy_wakey_bundle_id {
+        out.insert("HAPPY_WAKEY_BUNDLE_ID".to_string(), value);
+    }
+    let happy_wakey_oauth_port = pick(&["HAPPY_WAKEY_OAUTH_PORT"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
+    if let Some(value) = happy_wakey_oauth_port {
+        out.insert("HAPPY_WAKEY_OAUTH_PORT".to_string(), value);
+    }
+    let newsapi_key = pick(&["NEWSAPI_KEY"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
+    if let Some(value) = newsapi_key {
+        out.insert("NEWSAPI_KEY".to_string(), value);
+    }
+    let open_meteo_api_key = pick(&["OPEN_METEO_API_KEY"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
+    if let Some(value) = open_meteo_api_key {
+        out.insert("OPEN_METEO_API_KEY".to_string(), value);
+    }
+    let open_meteo_base_url = pick(&["OPEN_METEO_BASE_URL"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, Some("https://api.open-meteo.com/v1/forecast"));
+    if let Some(value) = open_meteo_base_url {
+        out.insert("OPEN_METEO_BASE_URL".to_string(), value);
+    }
+    let openweather_api_key = pick(&["OPENWEATHER_API_KEY"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
+    if let Some(value) = openweather_api_key {
+        out.insert("OPENWEATHER_API_KEY".to_string(), value);
+    }
+    let platform_url = pick(&["HAPPY_WAKEY_PLATFORM_URL"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, Some("https://98.90.186.114"));
+    if let Some(value) = platform_url {
+        out.insert("HAPPY_WAKEY_PLATFORM_URL".to_string(), value);
+    }
+    let shared_auth_url = pick(&["HAPPY_WAKEY_SHARED_AUTH_URL"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
+    if let Some(value) = shared_auth_url {
+        out.insert("HAPPY_WAKEY_SHARED_AUTH_URL".to_string(), value);
+    }
+    let supabase_anon_key = pick(&["SUPABASE_ANON_KEY"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, None);
+    if let Some(value) = supabase_anon_key {
+        out.insert("SUPABASE_ANON_KEY".to_string(), value);
+    }
+    let supabase_url = pick(&["SUPABASE_URL"], &["flags", "env_shell", "env_file"], shell, dotenv, flags, Some("https://vgzyyfhnendriyrhakkp.supabase.co"));
+    if let Some(value) = supabase_url {
+        out.insert("SUPABASE_URL".to_string(), value);
+    }
+    Ok(out)
+}
+
+/// Effectful overlay: `.env` files then the process environment, ranked per key.
+pub fn load_env_map_from_os() -> Result<std::collections::BTreeMap<String, String>, MissingEnv> {
+    load_env_map(&shell_env(), &load_dotenv_files(&[".env"]), &std::collections::BTreeMap::new())
 }

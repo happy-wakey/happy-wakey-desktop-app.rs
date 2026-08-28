@@ -1156,8 +1156,6 @@ fn safe_external_url(raw: &str) -> Result<url::Url, String> {
 // Entry point
 // ---------------------------------------------------------------------------
 fn main() {
-    let env_values = env_runtime::load_from_os();
-    let _ = &env_values;
     if let Err(error) = env_config::init() {
         eprintln!("Happy Wakey configuration failed: {error:#}");
         std::process::exit(2);
