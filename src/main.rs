@@ -1,3 +1,8 @@
+#[path = "../generated/rust/env.rs"]
+mod env;
+#[path = "../generated/rust/runtime.rs"]
+mod env_runtime;
+
 mod app_state;
 mod bluetooth;
 mod config;
