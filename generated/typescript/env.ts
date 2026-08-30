@@ -2,56 +2,34 @@
 
 export const SERVICE = "happy-wakey-desktop-app" as const;
 export const CONFIG_DIR = "CONFIG_DIR" as const;
-export const FINNHUB_API_KEY = "FINNHUB_API_KEY" as const;
-export const FLAGS2ENV_CONFIG = "FLAGS2ENV_CONFIG" as const;
 export const GATEWAY_URL = "HAPPY_WAKEY_GATEWAY_URL" as const;
 export const GIT_REPO_PATH = "GIT_REPO_PATH" as const;
-export const HAPPY_WAKEY_BUNDLE_ID = "HAPPY_WAKEY_BUNDLE_ID" as const;
 export const HAPPY_WAKEY_OAUTH_PORT = "HAPPY_WAKEY_OAUTH_PORT" as const;
-export const NEWSAPI_KEY = "NEWSAPI_KEY" as const;
-export const OPEN_METEO_API_KEY = "OPEN_METEO_API_KEY" as const;
 export const OPEN_METEO_BASE_URL = "OPEN_METEO_BASE_URL" as const;
 export const OPEN_METEO_BASE_URL_DEFAULT = "https://api.open-meteo.com/v1/forecast" as const;
-export const OPENWEATHER_API_KEY = "OPENWEATHER_API_KEY" as const;
 export const PLATFORM_URL = "HAPPY_WAKEY_PLATFORM_URL" as const;
-export const PLATFORM_URL_DEFAULT = "https://98.90.186.114" as const;
 export const SHARED_AUTH_URL = "HAPPY_WAKEY_SHARED_AUTH_URL" as const;
-export const SUPABASE_ANON_KEY = "SUPABASE_ANON_KEY" as const;
 export const SUPABASE_URL = "SUPABASE_URL" as const;
 export const SUPABASE_URL_DEFAULT = "https://vgzyyfhnendriyrhakkp.supabase.co" as const;
 
 export interface DesktopEnv {
   readonly CONFIG_DIR?: string;
-  readonly FINNHUB_API_KEY?: string;
-  readonly FLAGS2ENV_CONFIG?: string;
   readonly HAPPY_WAKEY_GATEWAY_URL?: string;
   readonly GIT_REPO_PATH?: string;
-  readonly HAPPY_WAKEY_BUNDLE_ID?: string;
   readonly HAPPY_WAKEY_OAUTH_PORT?: string;
-  readonly NEWSAPI_KEY?: string;
-  readonly OPEN_METEO_API_KEY?: string;
   readonly OPEN_METEO_BASE_URL: string;
-  readonly OPENWEATHER_API_KEY?: string;
-  readonly HAPPY_WAKEY_PLATFORM_URL: string;
+  readonly HAPPY_WAKEY_PLATFORM_URL?: string;
   readonly HAPPY_WAKEY_SHARED_AUTH_URL?: string;
-  readonly SUPABASE_ANON_KEY?: string;
   readonly SUPABASE_URL: string;
 }
 
 export const EnvKeys = {
   CONFIG_DIR: CONFIG_DIR,
-  FINNHUB_API_KEY: FINNHUB_API_KEY,
-  FLAGS2ENV_CONFIG: FLAGS2ENV_CONFIG,
   GATEWAY_URL: GATEWAY_URL,
   GIT_REPO_PATH: GIT_REPO_PATH,
-  HAPPY_WAKEY_BUNDLE_ID: HAPPY_WAKEY_BUNDLE_ID,
   HAPPY_WAKEY_OAUTH_PORT: HAPPY_WAKEY_OAUTH_PORT,
-  NEWSAPI_KEY: NEWSAPI_KEY,
-  OPEN_METEO_API_KEY: OPEN_METEO_API_KEY,
   OPEN_METEO_BASE_URL: OPEN_METEO_BASE_URL,
-  OPENWEATHER_API_KEY: OPENWEATHER_API_KEY,
   PLATFORM_URL: PLATFORM_URL,
   SHARED_AUTH_URL: SHARED_AUTH_URL,
-  SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
   SUPABASE_URL: SUPABASE_URL,
 } as const;

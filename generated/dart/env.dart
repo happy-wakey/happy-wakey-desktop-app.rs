@@ -5,21 +5,13 @@ final class DesktopEnv {
 
   static const String service = 'happy-wakey-desktop-app';
   static const String configDir = 'CONFIG_DIR';
-  static const String finnhubApiKey = 'FINNHUB_API_KEY';
-  static const String flags2envConfig = 'FLAGS2ENV_CONFIG';
   static const String gatewayUrl = 'HAPPY_WAKEY_GATEWAY_URL';
   static const String gitRepoPath = 'GIT_REPO_PATH';
-  static const String happyWakeyBundleId = 'HAPPY_WAKEY_BUNDLE_ID';
   static const String happyWakeyOauthPort = 'HAPPY_WAKEY_OAUTH_PORT';
-  static const String newsapiKey = 'NEWSAPI_KEY';
-  static const String openMeteoApiKey = 'OPEN_METEO_API_KEY';
   static const String openMeteoBaseUrl = 'OPEN_METEO_BASE_URL';
   static const String openMeteoBaseUrlDefault = 'https://api.open-meteo.com/v1/forecast';
-  static const String openweatherApiKey = 'OPENWEATHER_API_KEY';
   static const String platformUrl = 'HAPPY_WAKEY_PLATFORM_URL';
-  static const String platformUrlDefault = 'https://98.90.186.114';
   static const String sharedAuthUrl = 'HAPPY_WAKEY_SHARED_AUTH_URL';
-  static const String supabaseAnonKey = 'SUPABASE_ANON_KEY';
   static const String supabaseUrl = 'SUPABASE_URL';
   static const String supabaseUrlDefault = 'https://vgzyyfhnendriyrhakkp.supabase.co';
 }

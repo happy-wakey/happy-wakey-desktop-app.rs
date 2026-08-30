@@ -136,7 +136,7 @@ Rectangle {
 
         Text {
             Layout.fillWidth: true
-            text: "Only peripherals advertising the Happy Wakey service UUID are shown. Commands are versioned, bounded to 512 bytes, and never contain authentication tokens or customer identifiers."
+            text: "Only peripherals advertising the Happy Wakey service UUID are shown. Commands are versioned, bounded to 512 bytes, and never contain authentication credentials or customer identifiers."
             color: theme.muted
             wrapMode: Text.WordWrap
             font.pixelSize: 11

@@ -5,19 +5,12 @@ import gleam/option.{type Option, None, Some}
 pub type DesktopEnvValues {
   DesktopEnvValues(
     config_dir: Option(String),
-    finnhub_api_key: Option(String),
-    flags2env_config: Option(String),
     gateway_url: Option(String),
     git_repo_path: Option(String),
-    happy_wakey_bundle_id: Option(String),
     happy_wakey_oauth_port: Option(String),
-    newsapi_key: Option(String),
-    open_meteo_api_key: Option(String),
     open_meteo_base_url: String,
-    openweather_api_key: Option(String),
-    platform_url: String,
+    platform_url: Option(String),
     shared_auth_url: Option(String),
-    supabase_anon_key: Option(String),
     supabase_url: String,
   )
 }
@@ -26,19 +19,12 @@ pub type DesktopEnvValues {
 pub fn load_from(lookup: fn(String) -> Option(String)) -> DesktopEnvValues {
   DesktopEnvValues(
     config_dir: nonempty(lookup("CONFIG_DIR")),
-    finnhub_api_key: nonempty(lookup("FINNHUB_API_KEY")),
-    flags2env_config: nonempty(lookup("FLAGS2ENV_CONFIG")),
     gateway_url: nonempty(lookup("HAPPY_WAKEY_GATEWAY_URL")),
     git_repo_path: nonempty(lookup("GIT_REPO_PATH")),
-    happy_wakey_bundle_id: nonempty(lookup("HAPPY_WAKEY_BUNDLE_ID")),
     happy_wakey_oauth_port: nonempty(lookup("HAPPY_WAKEY_OAUTH_PORT")),
-    newsapi_key: nonempty(lookup("NEWSAPI_KEY")),
-    open_meteo_api_key: nonempty(lookup("OPEN_METEO_API_KEY")),
     open_meteo_base_url: nonempty_or(lookup("OPEN_METEO_BASE_URL"), "https://api.open-meteo.com/v1/forecast"),
-    openweather_api_key: nonempty(lookup("OPENWEATHER_API_KEY")),
-    platform_url: nonempty_or(lookup("HAPPY_WAKEY_PLATFORM_URL"), "https://98.90.186.114"),
+    platform_url: nonempty(lookup("HAPPY_WAKEY_PLATFORM_URL")),
     shared_auth_url: nonempty(lookup("HAPPY_WAKEY_SHARED_AUTH_URL")),
-    supabase_anon_key: nonempty(lookup("SUPABASE_ANON_KEY")),
     supabase_url: nonempty_or(lookup("SUPABASE_URL"), "https://vgzyyfhnendriyrhakkp.supabase.co"),
   )
 }

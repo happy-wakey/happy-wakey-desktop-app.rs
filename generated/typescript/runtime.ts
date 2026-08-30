@@ -2,19 +2,12 @@
 
 export interface DesktopEnvValues {
   readonly config_dir?: string;
-  readonly finnhub_api_key?: string;
-  readonly flags2env_config?: string;
   readonly gateway_url?: string;
   readonly git_repo_path?: string;
-  readonly happy_wakey_bundle_id?: string;
   readonly happy_wakey_oauth_port?: string;
-  readonly newsapi_key?: string;
-  readonly open_meteo_api_key?: string;
   readonly open_meteo_base_url: string;
-  readonly openweather_api_key?: string;
-  readonly platform_url: string;
+  readonly platform_url?: string;
   readonly shared_auth_url?: string;
-  readonly supabase_anon_key?: string;
   readonly supabase_url: string;
 }
 
@@ -22,19 +15,12 @@ export interface DesktopEnvValues {
 export function loadFrom(lookup: (key: string) => string | undefined): DesktopEnvValues {
   return {
     config_dir: nonEmpty(lookup("CONFIG_DIR")),
-    finnhub_api_key: nonEmpty(lookup("FINNHUB_API_KEY")),
-    flags2env_config: nonEmpty(lookup("FLAGS2ENV_CONFIG")),
     gateway_url: nonEmpty(lookup("HAPPY_WAKEY_GATEWAY_URL")),
     git_repo_path: nonEmpty(lookup("GIT_REPO_PATH")),
-    happy_wakey_bundle_id: nonEmpty(lookup("HAPPY_WAKEY_BUNDLE_ID")),
     happy_wakey_oauth_port: nonEmpty(lookup("HAPPY_WAKEY_OAUTH_PORT")),
-    newsapi_key: nonEmpty(lookup("NEWSAPI_KEY")),
-    open_meteo_api_key: nonEmpty(lookup("OPEN_METEO_API_KEY")),
     open_meteo_base_url: nonEmpty(lookup("OPEN_METEO_BASE_URL")) ?? "https://api.open-meteo.com/v1/forecast",
-    openweather_api_key: nonEmpty(lookup("OPENWEATHER_API_KEY")),
-    platform_url: nonEmpty(lookup("HAPPY_WAKEY_PLATFORM_URL")) ?? "https://98.90.186.114",
+    platform_url: nonEmpty(lookup("HAPPY_WAKEY_PLATFORM_URL")),
     shared_auth_url: nonEmpty(lookup("HAPPY_WAKEY_SHARED_AUTH_URL")),
-    supabase_anon_key: nonEmpty(lookup("SUPABASE_ANON_KEY")),
     supabase_url: nonEmpty(lookup("SUPABASE_URL")) ?? "https://vgzyyfhnendriyrhakkp.supabase.co",
   };
 }
@@ -104,7 +90,7 @@ export function requireEnv(
   if (trimmed) {
     return trimmed;
   }
-  throw new MissingEnvError({ name, expectedType, examples });
+  throw new MissingEnvError({ envKey: name, expectedType, examples });
 }
 
 function pick(
@@ -164,6 +150,17 @@ function dotenvEnabled(): boolean {
   return !["0", "false", "FALSE", "no", "NO"].includes(value?.trim() ?? "");
 }
 
+function isSafeDotenvPath(path: string): boolean {
+  if (!path || path.includes("\0") || path.includes("..")) {
+    return false;
+  }
+  if (path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path)) {
+    return false;
+  }
+  const base = path.split(/[\\/]/).pop() ?? "";
+  return base === ".env" || base.startsWith(".env.");
+}
+
 export function loadDotenvFiles(files: readonly string[]): Record<string, string> {
   if (!dotenvEnabled() || typeof process === "undefined") {
     return {};
@@ -174,7 +171,7 @@ export function loadDotenvFiles(files: readonly string[]): Record<string, string
   } catch {
     return {};
   }
-  return files.reduce<Record<string, string>>((acc, path) => {
+  return files.filter(isSafeDotenvPath).reduce<Record<string, string>>((acc, path) => {
     try {
       return { ...acc, ...parseDotenv(fs!.readFileSync(path, "utf8")) };
     } catch {
@@ -183,18 +180,19 @@ export function loadDotenvFiles(files: readonly string[]): Record<string, string
   }, {});
 }
 export interface MissingEnv {
-  readonly name: string;
+  readonly envKey: string;
   readonly expectedType: string;
   readonly examples: readonly string[];
 }
 
 export class MissingEnvError extends Error implements MissingEnv {
-  readonly name: string;
+  readonly envKey: string;
   readonly expectedType: string;
   readonly examples: readonly string[];
   constructor(fields: MissingEnv) {
-    super(`missing required environment variable ${fields.name}\n  expected type: ${fields.expectedType}\n  examples: ${fields.examples.join(", ")}`);
-    this.name = fields.name;
+    super(`missing required environment variable ${fields.envKey}\n  expected type: ${fields.expectedType}\n  examples: ${fields.examples.join(", ")}`);
+    this.name = "MissingEnvError";
+    this.envKey = fields.envKey;
     this.expectedType = fields.expectedType;
     this.examples = fields.examples;
   }
@@ -209,41 +207,163 @@ export function loadEnvMap(
   const out: Record<string, string> = {};
   const config_dir = pick(["CONFIG_DIR"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
   if (config_dir !== undefined) out["CONFIG_DIR"] = config_dir;
-  const finnhub_api_key = pick(["FINNHUB_API_KEY"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
-  if (finnhub_api_key !== undefined) out["FINNHUB_API_KEY"] = finnhub_api_key;
-  const flags2env_config = pick(["FLAGS2ENV_CONFIG"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
-  if (flags2env_config !== undefined) out["FLAGS2ENV_CONFIG"] = flags2env_config;
   const gateway_url = pick(["HAPPY_WAKEY_GATEWAY_URL"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
   if (gateway_url !== undefined) out["HAPPY_WAKEY_GATEWAY_URL"] = gateway_url;
   const git_repo_path = pick(["GIT_REPO_PATH"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
   if (git_repo_path !== undefined) out["GIT_REPO_PATH"] = git_repo_path;
-  const happy_wakey_bundle_id = pick(["HAPPY_WAKEY_BUNDLE_ID"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
-  if (happy_wakey_bundle_id !== undefined) out["HAPPY_WAKEY_BUNDLE_ID"] = happy_wakey_bundle_id;
   const happy_wakey_oauth_port = pick(["HAPPY_WAKEY_OAUTH_PORT"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
   if (happy_wakey_oauth_port !== undefined) out["HAPPY_WAKEY_OAUTH_PORT"] = happy_wakey_oauth_port;
-  const newsapi_key = pick(["NEWSAPI_KEY"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
-  if (newsapi_key !== undefined) out["NEWSAPI_KEY"] = newsapi_key;
-  const open_meteo_api_key = pick(["OPEN_METEO_API_KEY"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
-  if (open_meteo_api_key !== undefined) out["OPEN_METEO_API_KEY"] = open_meteo_api_key;
   const open_meteo_base_url = pick(["OPEN_METEO_BASE_URL"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, "https://api.open-meteo.com/v1/forecast");
   if (open_meteo_base_url !== undefined) out["OPEN_METEO_BASE_URL"] = open_meteo_base_url;
-  const openweather_api_key = pick(["OPENWEATHER_API_KEY"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
-  if (openweather_api_key !== undefined) out["OPENWEATHER_API_KEY"] = openweather_api_key;
-  const platform_url = pick(["HAPPY_WAKEY_PLATFORM_URL"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, "https://98.90.186.114");
+  const platform_url = pick(["HAPPY_WAKEY_PLATFORM_URL"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
   if (platform_url !== undefined) out["HAPPY_WAKEY_PLATFORM_URL"] = platform_url;
   const shared_auth_url = pick(["HAPPY_WAKEY_SHARED_AUTH_URL"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
   if (shared_auth_url !== undefined) out["HAPPY_WAKEY_SHARED_AUTH_URL"] = shared_auth_url;
-  const supabase_anon_key = pick(["SUPABASE_ANON_KEY"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, undefined);
-  if (supabase_anon_key !== undefined) out["SUPABASE_ANON_KEY"] = supabase_anon_key;
   const supabase_url = pick(["SUPABASE_URL"], ["flags", "env_shell", "env_file"], shell, dotenv, flags, "https://vgzyyfhnendriyrhakkp.supabase.co");
   if (supabase_url !== undefined) out["SUPABASE_URL"] = supabase_url;
+  const contract = checkOsEnv(out);
+  if (contract.length > 0) {
+    const first = contract[0];
+    throw new MissingEnvError({ envKey: first.path, expectedType: "json-schema-2020-12", examples: [] });
+  }
   return out;
 }
 
-const DOTENV_FILES: readonly string[] = [".env"];
+const DOTENV_FILES: readonly string[] = [];
 /** Effectful overlay: `.env` files then `process.env`, ranked per key. */
 export function loadEnvMapFromOs(
   shell: Record<string, string | undefined> = typeof process !== "undefined" ? process.env : {},
 ): Record<string, string> {
   return loadEnvMap(shell, loadDotenvFiles(DOTENV_FILES), {});
+}
+
+export interface ContractError {
+  readonly path: string;
+  readonly message: string;
+}
+
+/** Validate the resolved env map against the generated JSON Schema rules. */
+export function checkOsEnv(env: Record<string, string>): ContractError[] {
+  const errors: ContractError[] = [];
+  {
+    const raw = nonEmpty(env["CONFIG_DIR"]);
+    if (raw !== undefined) {
+      const message = contractCheckString(raw);
+      if (message) errors.push({ path: "CONFIG_DIR", message });
+    }
+  }
+  {
+    const raw = nonEmpty(env["HAPPY_WAKEY_GATEWAY_URL"]);
+    if (raw !== undefined) {
+      const message = contractCheckString(raw);
+      if (message) errors.push({ path: "HAPPY_WAKEY_GATEWAY_URL", message });
+    }
+  }
+  {
+    const raw = nonEmpty(env["GIT_REPO_PATH"]);
+    if (raw !== undefined) {
+      const message = contractCheckString(raw);
+      if (message) errors.push({ path: "GIT_REPO_PATH", message });
+    }
+  }
+  {
+    const raw = nonEmpty(env["HAPPY_WAKEY_OAUTH_PORT"]);
+    if (raw !== undefined) {
+      const message = contractCheckString(raw);
+      if (message) errors.push({ path: "HAPPY_WAKEY_OAUTH_PORT", message });
+    }
+  }
+  {
+    const raw = nonEmpty(env["OPEN_METEO_BASE_URL"]);
+    if (raw !== undefined) {
+      const message = contractCheckString(raw);
+      if (message) errors.push({ path: "OPEN_METEO_BASE_URL", message });
+    }
+  }
+  {
+    const raw = nonEmpty(env["HAPPY_WAKEY_PLATFORM_URL"]);
+    if (raw !== undefined) {
+      const message = contractCheckString(raw);
+      if (message) errors.push({ path: "HAPPY_WAKEY_PLATFORM_URL", message });
+    }
+  }
+  {
+    const raw = nonEmpty(env["HAPPY_WAKEY_SHARED_AUTH_URL"]);
+    if (raw !== undefined) {
+      const message = contractCheckString(raw);
+      if (message) errors.push({ path: "HAPPY_WAKEY_SHARED_AUTH_URL", message });
+    }
+  }
+  {
+    const raw = nonEmpty(env["SUPABASE_URL"]);
+    if (raw !== undefined) {
+      const message = contractCheckString(raw);
+      if (message) errors.push({ path: "SUPABASE_URL", message });
+    }
+  }
+  for (const key of Object.keys(env)) {
+    if (!KNOWN_ENV_KEYS.includes(key)) {
+      errors.push({ path: key, message: "additional property not in the env contract" });
+    }
+  }
+  return errors;
+}
+
+export function assertOsEnv(env: Record<string, string>): void {
+  const errors = checkOsEnv(env);
+  if (errors.length > 0) {
+    throw new Error(`environment contract violated: ${errors.map((error) => `${error.path}: ${error.message}`).join("; ")}`);
+  }
+}
+
+const KNOWN_ENV_KEYS: readonly string[] = ["CONFIG_DIR", "HAPPY_WAKEY_GATEWAY_URL", "GIT_REPO_PATH", "HAPPY_WAKEY_OAUTH_PORT", "OPEN_METEO_BASE_URL", "HAPPY_WAKEY_PLATFORM_URL", "HAPPY_WAKEY_SHARED_AUTH_URL", "SUPABASE_URL", ];
+
+function contractCheckString(raw: string): string | undefined {
+  return raw.length === 0 ? "empty string" : undefined;
+}
+function contractCheckBool(raw: string): string | undefined {
+  switch (raw) {
+    case "0":
+    case "1":
+    case "true":
+    case "false":
+    case "TRUE":
+    case "FALSE":
+    case "yes":
+    case "no":
+    case "YES":
+    case "NO":
+      return undefined;
+    default:
+      return `not a bool env token: ${raw}`;
+  }
+}
+function contractCheckInt(raw: string): string | undefined {
+  return /^-?[0-9]+$/.test(raw) ? undefined : `not an int: ${raw}`;
+}
+function contractCheckFloat(raw: string): string | undefined {
+  return Number.isNaN(Number.parseFloat(raw)) ? `not a float: ${raw}` : undefined;
+}
+function contractCheckJson(raw: string): string | undefined {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object") return undefined;
+    return "expected JSON object or array string";
+  } catch {
+    return "expected JSON object or array string";
+  }
+}
+
+export const OS_ENV_SCHEMA = {"$id":"https://github.com/flags-2-env/flags-2-env-cli/generated/json-schema/happy-wakey-desktop-app/env.os.schema.json","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"description":"Resolved environment map for DesktopEnv after flags-2-env overlay (flags > env_shell > env_file unless reordered). Values are still strings, as the OS stores them. Validate this object at runtime with `check_os_env` or `f2e check-contract`; do not hand-edit generated sources.","properties":{"CONFIG_DIR":{"examples":["example-value"],"minLength":1,"type":"string","x-env-key":"CONFIG_DIR","x-flag-type":"string"},"GIT_REPO_PATH":{"examples":["example-value"],"minLength":1,"type":"string","x-env-key":"GIT_REPO_PATH","x-flag-type":"string"},"HAPPY_WAKEY_GATEWAY_URL":{"examples":["http://127.0.0.1:8080","https://api.example.test"],"minLength":1,"type":"string","x-env-key":"HAPPY_WAKEY_GATEWAY_URL","x-flag-type":"string"},"HAPPY_WAKEY_OAUTH_PORT":{"description":"Runtime environment key HAPPY_WAKEY_OAUTH_PORT.","examples":["example-value"],"minLength":1,"type":"string","x-env-key":"HAPPY_WAKEY_OAUTH_PORT","x-flag-type":"string"},"HAPPY_WAKEY_PLATFORM_URL":{"examples":["http://127.0.0.1:8080","https://api.example.test"],"minLength":1,"type":"string","x-env-key":"HAPPY_WAKEY_PLATFORM_URL","x-flag-type":"string"},"HAPPY_WAKEY_SHARED_AUTH_URL":{"examples":["http://127.0.0.1:8080","https://api.example.test"],"minLength":1,"type":"string","x-env-key":"HAPPY_WAKEY_SHARED_AUTH_URL","x-flag-type":"string"},"OPEN_METEO_BASE_URL":{"examples":["http://127.0.0.1:8080","https://api.example.test"],"minLength":1,"type":"string","x-env-key":"OPEN_METEO_BASE_URL","x-flag-type":"string"},"SUPABASE_URL":{"examples":["http://127.0.0.1:8080","https://api.example.test"],"minLength":1,"type":"string","x-env-key":"SUPABASE_URL","x-flag-type":"string"}},"title":"DesktopEnv resolved environment","type":"object","x-flags-2-env":{"generator":"flags-2-env","service":"happy-wakey-desktop-app","typeName":"DesktopEnv"}} as const;
+
+/** Like `loadFrom`, but throws when a required key is missing or empty. */
+export function tryLoadFrom(lookup: (key: string) => string | undefined): DesktopEnvValues {
+  const values = loadFrom(lookup);
+  return values;
+}
+
+export function tryLoadFromOs(
+  env: Record<string, string | undefined> = typeof process !== "undefined" ? process.env : {},
+): DesktopEnvValues {
+  return tryLoadFrom((key) => env[key]);
 }

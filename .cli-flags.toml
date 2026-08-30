@@ -49,7 +49,6 @@ type = "string"
 env = "HAPPY_WAKEY_PLATFORM_URL"
 aliases = ["platform-url"]
 type = "string"
-default = ""
 
 [flags.shared_auth_url]
 env = "HAPPY_WAKEY_SHARED_AUTH_URL"
@@ -62,50 +61,8 @@ aliases = ["happy-wakey-gateway-url"]
 type = "string"
 
 
-[flags.finnhub-api-key]
-env = "FINNHUB_API_KEY"
-long = "finnhub-api-key"
-type = "string"
-help = "Runtime environment key FINNHUB_API_KEY."
-
-[flags.flags2env-config]
-env = "FLAGS2ENV_CONFIG"
-long = "flags2env-config"
-type = "string"
-help = "Runtime environment key FLAGS2ENV_CONFIG."
-
-[flags.happy-wakey-bundle-id]
-env = "HAPPY_WAKEY_BUNDLE_ID"
-long = "happy-wakey-bundle-id"
-type = "string"
-help = "Runtime environment key HAPPY_WAKEY_BUNDLE_ID."
-
 [flags.happy-wakey-oauth-port]
 env = "HAPPY_WAKEY_OAUTH_PORT"
 long = "happy-wakey-oauth-port"
 type = "string"
 help = "Runtime environment key HAPPY_WAKEY_OAUTH_PORT."
-
-[flags.newsapi-key]
-env = "NEWSAPI_KEY"
-long = "newsapi-key"
-type = "string"
-help = "Runtime environment key NEWSAPI_KEY."
-
-[flags.openweather-api-key]
-env = "OPENWEATHER_API_KEY"
-long = "openweather-api-key"
-type = "string"
-help = "Runtime environment key OPENWEATHER_API_KEY."
-
-[flags.open-meteo-api-key]
-env = "OPEN_METEO_API_KEY"
-long = "open-meteo-api-key"
-type = "string"
-help = "Runtime environment key OPEN_METEO_API_KEY."
-
-[flags.supabase-anon-key]
-env = "SUPABASE_ANON_KEY"
-long = "supabase-anon-key"
-type = "string"
-help = "Runtime environment key SUPABASE_ANON_KEY."
