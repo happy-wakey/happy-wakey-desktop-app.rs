@@ -211,7 +211,7 @@ Rectangle {
                     theme: root.theme
                     Layout.preferredWidth: homeGrid.cardWidth
                     Layout.preferredHeight: 248
-                    title: "Stocks"
+                    title: "Markets"
                     metric: stockSymbolCount + " symbols"
                     detail: "Markets, commodities, and securities"
                     model: stocksModel
@@ -289,7 +289,7 @@ Rectangle {
                         Button {
                             text: "Open Settings"
                             Layout.alignment: Qt.AlignRight
-                            onClicked: root.navigate(8)
+                            onClicked: root.navigate(9)
                         }
                     }
                 }

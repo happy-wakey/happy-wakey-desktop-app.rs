@@ -24,7 +24,7 @@ pub const DESTINATIONS: &[Destination] = &[
     },
     Destination {
         id: "markets",
-        label: "Stocks",
+        label: "Markets",
         panel: 3,
     },
     Destination {
@@ -48,9 +48,14 @@ pub const DESTINATIONS: &[Destination] = &[
         panel: 7,
     },
     Destination {
+        id: "browser",
+        label: "Browser",
+        panel: 8,
+    },
+    Destination {
         id: "settings",
         label: "Settings",
-        panel: 8,
+        panel: 9,
     },
 ];
 
@@ -68,7 +73,7 @@ mod tests {
             ids,
             [
                 "home", "calendar", "weather", "markets", "news", "planner", "focus", "devices",
-                "settings"
+                "browser", "settings"
             ]
         );
         let qml = include_str!("../qml/MainWindow.qml");
@@ -83,6 +88,7 @@ mod tests {
         assert!(qml.contains("PlannerPanel"));
         assert!(qml.contains("FocusPanel"));
         assert!(qml.contains("DevicesPanel"));
+        assert!(qml.contains("BrowserPanel"));
         let planner = include_str!("../qml/PlannerPanel.qml");
         let focus = include_str!("../qml/FocusPanel.qml");
         let devices = include_str!("../qml/DevicesPanel.qml");

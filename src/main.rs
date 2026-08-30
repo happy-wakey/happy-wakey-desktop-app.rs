@@ -1163,8 +1163,8 @@ fn safe_external_url(raw: &str) -> Result<url::Url, String> {
     }
 
     let parsed = url::Url::parse(&input).map_err(|_| "Invalid URL".to_string())?;
-    if !matches!(parsed.scheme(), "https" | "http") || parsed.host_str().is_none() {
-        return Err("Only http and https URLs can be opened".into());
+    if !url_safety::is_safe_http_url(&parsed) {
+        return Err("Only credential-free HTTPS URLs and loopback HTTP URLs can be opened".into());
     }
     Ok(parsed)
 }
@@ -1197,12 +1197,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn safe_external_url_adds_scheme_and_accepts_http_s() {
+    fn safe_external_url_adds_scheme_and_accepts_safe_http_s() {
         assert_eq!(
             safe_external_url("example.com").unwrap().as_str(),
             "https://example.com/"
         );
-        assert!(safe_external_url("http://example.com/path").is_ok());
+        assert!(safe_external_url("http://127.0.0.1:8128/path").is_ok());
         assert!(safe_external_url("  https://example.com  ").is_ok());
     }
 
@@ -1213,6 +1213,9 @@ mod tests {
         assert!(safe_external_url("javascript:alert(1)").is_err());
         assert!(safe_external_url("file:///etc/passwd").is_err());
         assert!(safe_external_url("ftp://example.com").is_err());
+        assert!(safe_external_url("http://example.com/path").is_err());
+        assert!(safe_external_url("https://98.90.186.114/").is_err());
+        assert!(safe_external_url("https://user:pass@example.com/").is_err());
         assert!(safe_external_url(&format!("https://{}", "a".repeat(3000))).is_err());
     }
 }

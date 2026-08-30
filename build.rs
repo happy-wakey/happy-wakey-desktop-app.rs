@@ -20,6 +20,7 @@ fn main() {
                 "qml/PlannerPanel.qml",
                 "qml/FocusPanel.qml",
                 "qml/DevicesPanel.qml",
+                "qml/BrowserPanel.qml",
                 "qml/SettingsPanel.qml",
                 "qml/OnboardingPanel.qml",
             ],

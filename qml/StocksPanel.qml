@@ -14,7 +14,7 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             Text {
-                text: "📈 Stocks"
+                text: "📈 Markets"
                 font.pixelSize: 22
                 font.bold: true
                 color: theme.text
