@@ -59,6 +59,12 @@ mod qobject {
         #[qproperty(bool, stocks_loading)]
         #[qproperty(QString, news_json)]
         #[qproperty(bool, news_loading)]
+        #[qproperty(QString, inbox_json)]
+        #[qproperty(bool, inbox_loading)]
+        #[qproperty(QString, messages_json)]
+        #[qproperty(bool, messages_loading)]
+        #[qproperty(QString, health_json)]
+        #[qproperty(bool, health_loading)]
         // Config + onboarding
         #[qproperty(QString, app_config_json)]
         #[qproperty(QString, onboarding_json)]
@@ -93,6 +99,12 @@ mod qobject {
         fn refresh_stocks(self: Pin<&mut Backend>);
         #[qinvokable]
         fn refresh_news(self: Pin<&mut Backend>);
+        #[qinvokable]
+        fn refresh_inbox(self: Pin<&mut Backend>);
+        #[qinvokable]
+        fn refresh_messages(self: Pin<&mut Backend>);
+        #[qinvokable]
+        fn refresh_health(self: Pin<&mut Backend>);
         #[qinvokable]
         fn save_config(self: Pin<&mut Backend>, json: &QString);
         #[qinvokable]
@@ -143,6 +155,12 @@ pub struct BackendRust {
     stocks_loading: bool,
     news_json: QString,
     news_loading: bool,
+    inbox_json: QString,
+    inbox_loading: bool,
+    messages_json: QString,
+    messages_loading: bool,
+    health_json: QString,
+    health_loading: bool,
     app_config_json: QString,
     onboarding_json: QString,
     onboarding_step_index: i32,
@@ -190,6 +208,18 @@ impl Default for BackendRust {
             stocks_loading: false,
             news_json: QString::default(),
             news_loading: false,
+            inbox_json: json_qstring(&services::inbox::InboxDigestView::unavailable(
+                "Load the consented inbox after signing in",
+            )),
+            inbox_loading: false,
+            messages_json: json_qstring(&services::morning_brief::MessageDigestView::unavailable(
+                "Load policy-approved direct messages after signing in",
+            )),
+            messages_loading: false,
+            health_json: json_qstring(&services::morning_brief::HealthBriefView::unavailable(
+                "Load connected sleep and biometric summaries after signing in",
+            )),
+            health_loading: false,
             app_config_json: serialize_ui_config(&cfg),
             onboarding_json: serialize_onboarding(&cfg.onboarding),
             onboarding_step_index: i32::from(onboarding.index()),
@@ -288,6 +318,19 @@ impl qobject::Backend {
         ));
         self.as_mut()
             .set_calendar_agenda_json(json_qstring(&services::calendar::build_agenda(&[])));
+        self.as_mut().set_inbox_json(json_qstring(
+            &services::inbox::InboxDigestView::unavailable("Sign in to load a consented inbox"),
+        ));
+        self.as_mut().set_messages_json(json_qstring(
+            &services::morning_brief::MessageDigestView::unavailable(
+                "Sign in to load policy-approved direct messages",
+            ),
+        ));
+        self.as_mut().set_health_json(json_qstring(
+            &services::morning_brief::HealthBriefView::unavailable(
+                "Sign in to load connected health summaries",
+            ),
+        ));
         apply_config_snapshot(self.as_mut(), &cfg);
         emit_status(self, "Logged out".to_string());
     }
@@ -568,6 +611,188 @@ impl qobject::Backend {
         });
     }
 
+    fn refresh_inbox(mut self: Pin<&mut Self>) {
+        let Some(token) = begin_lane(self.as_mut(), Lane::Inbox) else {
+            return;
+        };
+        let cfg = config::load();
+        let Some(session) = cfg.supabase_session else {
+            self.as_mut().set_inbox_json(json_qstring(
+                &services::inbox::InboxDigestView::unavailable("Sign in to load a consented inbox"),
+            ));
+            finish_lane(self.as_mut(), Lane::Inbox, token, false);
+            emit_status(self, "Sign in before loading the inbox".to_owned());
+            return;
+        };
+        let Some(provider_token) = session
+            .provider_token
+            .filter(|value| !value.trim().is_empty())
+        else {
+            self.as_mut()
+                .set_inbox_json(json_qstring(&services::inbox::InboxDigestView::unavailable(
+                    "Mail access was not granted. Sign out, then sign in and approve read-only mail access.",
+                )));
+            finish_lane(self.as_mut(), Lane::Inbox, token, false);
+            emit_status(
+                self,
+                "Read-only mail access was not granted at sign-in".to_owned(),
+            );
+            return;
+        };
+
+        let provider = session.provider;
+        emit_status(
+            self.as_mut(),
+            "Loading priority inbox metadata...".to_owned(),
+        );
+        let thread = self.qt_thread();
+        std::thread::spawn(move || {
+            let result = services::inbox::fetch(&provider, &provider_token);
+            thread
+                .queue(move |mut backend| {
+                    if !finish_lane(backend.as_mut(), Lane::Inbox, token, result.is_ok()) {
+                        return;
+                    }
+                    match result {
+                        Ok(digest) => {
+                            let count = digest.items.len();
+                            backend.as_mut().set_inbox_json(json_qstring(&digest));
+                            emit_status(
+                                backend,
+                                format!("Priority inbox updated: {count} item(s)"),
+                            );
+                        }
+                        Err(error) => {
+                            let mut digest = services::inbox::InboxDigestView::unavailable(error);
+                            digest.state = "failed".to_owned();
+                            backend.as_mut().set_inbox_json(json_qstring(&digest));
+                            emit_status(backend, "Priority inbox could not be loaded".to_owned());
+                        }
+                    }
+                })
+                .ok();
+        });
+    }
+
+    fn refresh_messages(mut self: Pin<&mut Self>) {
+        let Some(token) = begin_lane(self.as_mut(), Lane::DirectMessages) else {
+            return;
+        };
+        let cfg = config::load();
+        let Some(session) = cfg.supabase_session else {
+            self.as_mut().set_messages_json(json_qstring(
+                &services::morning_brief::MessageDigestView::unavailable(
+                    "Sign in to load policy-approved direct messages",
+                ),
+            ));
+            finish_lane(self.as_mut(), Lane::DirectMessages, token, false);
+            emit_status(self, "Sign in before loading direct messages".to_owned());
+            return;
+        };
+
+        emit_status(
+            self.as_mut(),
+            "Loading policy-approved direct messages...".to_owned(),
+        );
+        let thread = self.qt_thread();
+        std::thread::spawn(move || {
+            let result = services::morning_brief::fetch_messages(&session.access_token);
+            thread
+                .queue(move |mut backend| {
+                    if !finish_lane(
+                        backend.as_mut(),
+                        Lane::DirectMessages,
+                        token,
+                        result.is_ok(),
+                    ) {
+                        return;
+                    }
+                    match result {
+                        Ok(digest) => {
+                            let count = digest.items.len();
+                            backend.as_mut().set_messages_json(json_qstring(&digest));
+                            emit_status(
+                                backend,
+                                format!("Direct-message digest updated: {count} thread(s)"),
+                            );
+                        }
+                        Err(_) => {
+                            let mut digest =
+                                services::morning_brief::MessageDigestView::unavailable(
+                                    "The direct-message digest is unavailable",
+                                );
+                            digest.state = "failed".to_owned();
+                            backend.as_mut().set_messages_json(json_qstring(&digest));
+                            emit_status(
+                                backend,
+                                "Direct-message digest could not be loaded".to_owned(),
+                            );
+                        }
+                    }
+                })
+                .ok();
+        });
+    }
+
+    fn refresh_health(mut self: Pin<&mut Self>) {
+        let Some(token) = begin_lane(self.as_mut(), Lane::Health) else {
+            return;
+        };
+        let cfg = config::load();
+        let Some(session) = cfg.supabase_session else {
+            self.as_mut().set_health_json(json_qstring(
+                &services::morning_brief::HealthBriefView::unavailable(
+                    "Sign in to load connected sleep and biometric summaries",
+                ),
+            ));
+            finish_lane(self.as_mut(), Lane::Health, token, false);
+            emit_status(self, "Sign in before loading health summaries".to_owned());
+            return;
+        };
+
+        emit_status(
+            self.as_mut(),
+            "Loading connected sleep and biometric summaries...".to_owned(),
+        );
+        let access_token = session.access_token;
+        let session_user_id = session.user_id;
+        let thread = self.qt_thread();
+        std::thread::spawn(move || {
+            let result = services::morning_brief::fetch_health(&access_token);
+            thread
+                .queue(move |mut backend| {
+                    // Health is a public formal lane because future native
+                    // device-store reads may work signed out. This adapter is
+                    // gateway-backed, so bind its completion to the exact
+                    // session that started it and discard results after logout
+                    // or an account/session change.
+                    if !session_is_current(&session_user_id, &access_token) {
+                        finish_lane(backend.as_mut(), Lane::Health, token, false);
+                        return;
+                    }
+                    if !finish_lane(backend.as_mut(), Lane::Health, token, result.is_ok()) {
+                        return;
+                    }
+                    match result {
+                        Ok(brief) => {
+                            let state = brief.state.clone();
+                            backend.as_mut().set_health_json(json_qstring(&brief));
+                            emit_status(backend, format!("Health summary updated: {state}"));
+                        }
+                        Err(_) => {
+                            let mut brief = services::morning_brief::HealthBriefView::unavailable(
+                                "Connected health summaries are unavailable",
+                            );
+                            brief.state = "failed".to_owned();
+                            backend.as_mut().set_health_json(json_qstring(&brief));
+                            emit_status(backend, "Health summaries could not be loaded".to_owned());
+                        }
+                    }
+                })
+                .ok();
+        });
+    }
+
     fn save_config(mut self: Pin<&mut Self>, json: &QString) {
         let s = json.to_string();
         match serde_json::from_str::<config::Config>(&s) {
@@ -766,8 +991,14 @@ fn json_qstring<T: serde::Serialize>(value: &T) -> QString {
     QString::from(serde_json::to_string(value).unwrap_or_default().as_str())
 }
 
+fn session_is_current(user_id: &str, access_token: &str) -> bool {
+    config::load()
+        .supabase_session
+        .is_some_and(|session| session.user_id == user_id && session.access_token == access_token)
+}
+
 fn desktop_parity_witness() -> usize {
-    assert_eq!(destinations::DESTINATIONS.len(), 9);
+    assert_eq!(destinations::DESTINATIONS.len(), 11);
     let encoded = bluetooth::encode_preview_alarm_command("018f5cc6-6d8b-7b2a-9f38-269e6a7b1f11")
         .expect("fixture BLE operation id");
     destinations::DESTINATIONS.len()
@@ -812,6 +1043,9 @@ fn sync_machine_properties(mut b: Pin<&mut Backend>) {
         weather_loading,
         stocks_loading,
         news_loading,
+        inbox_loading,
+        messages_loading,
+        health_loading,
         bluetooth_busy,
         state_json,
     ) = {
@@ -826,6 +1060,9 @@ fn sync_machine_properties(mut b: Pin<&mut Backend>) {
             machine.lane(Lane::Weather).is_running(),
             machine.lane(Lane::Stocks).is_running(),
             machine.lane(Lane::News).is_running(),
+            machine.lane(Lane::Inbox).is_running(),
+            machine.lane(Lane::DirectMessages).is_running(),
+            machine.lane(Lane::Health).is_running(),
             machine.lane(Lane::Bluetooth).is_running(),
             serialize_machine(machine),
         )
@@ -839,6 +1076,9 @@ fn sync_machine_properties(mut b: Pin<&mut Backend>) {
     b.as_mut().set_weather_loading(weather_loading);
     b.as_mut().set_stocks_loading(stocks_loading);
     b.as_mut().set_news_loading(news_loading);
+    b.as_mut().set_inbox_loading(inbox_loading);
+    b.as_mut().set_messages_loading(messages_loading);
+    b.as_mut().set_health_loading(health_loading);
     b.as_mut().set_bluetooth_busy(bluetooth_busy);
     b.as_mut().set_app_state_json(state_json);
 }

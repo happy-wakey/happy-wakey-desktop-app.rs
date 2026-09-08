@@ -2,9 +2,8 @@
 
 ## Repository
 
-```text
-/Users/maca5/codes/happy-wakey/happy-wakey-desktop-app.rs
-```
+Clone `https://github.com/happy-wakey/happy-wakey-desktop-app.rs` and run the
+commands below from the repository root.
 
 ## Prerequisites
 
@@ -78,10 +77,19 @@ Current unit coverage includes:
 - Open-Meteo parsing and WMO mapping;
 - OAuth provider aliases, PKCE, callback/state parsing;
 - external URL safety;
-- transient HTTP retry against a local test server.
+- transient HTTP retry against a local test server;
+- redirect refusal for bearer-authenticated requests;
 - Google/Microsoft calendar normalization, local week boundaries, all-day semantics, agenda conflicts, and deduplication;
+- metadata-only Gmail and Microsoft inbox normalization, category filtering,
+  URL safety, deduplication, and 20-item bounds;
+- canonical direct-message policy enforcement, bounded previews, partial
+  platform status, and safe deep links;
+- sleep/biometric validation, absent-value preservation, and bounded
+  non-diagnostic observations;
 - reminder offset reconciliation, cancellation filtering, ledger retention, and failed-delivery retry state;
 - deterministic future-only cloud jobs and HTTPS/loopback service URL enforcement.
+- exhaustive native state exploration plus deterministic, randomized, and
+  bounded formal checks across all twelve effect lanes.
 
 ### Live Provider Tests
 
@@ -90,6 +98,10 @@ Live tests should be opt-in and use non-production test accounts/keys. They shou
 - Open-Meteo response shape and forecast completeness;
 - Google week fetch with timezone/all-day events;
 - Microsoft week fetch and token scopes;
+- Gmail metadata and Microsoft `Mail.ReadBasic` behavior with test accounts
+  containing mail that would prove body fields are never requested;
+- authenticated canonical direct-message, sleep, and biometric gateway reads,
+  including denied, empty, degraded, and mixed-success fixtures;
 - Finnhub valid, invalid, ETF, and commodity-like symbols;
 - NewsAPI keyword enforcement and empty result behavior;
 - Supabase RLS with two distinct users.
@@ -109,10 +121,15 @@ Test the built desktop executable, not only QML source:
 7. Verify empty, loading, success, partial failure, and total failure states.
 8. Scan for a fixture peripheral, connect, send a preview alarm, disconnect,
    and confirm no credential appears in the GATT payload.
-9. Restart and verify configuration persistence.
-10. Send a test reminder, change reminder offsets, restart, and verify both native delivery and persisted settings.
-11. After sign-in, enable cloud email reminders, refresh Calendar, verify the pending count, and use Test cloud email.
-12. Test screen reader names, tab order, high DPI, and reduced motion where applicable.
+9. Open Morning brief and independently exercise signed-out, loading, empty,
+   degraded, failed, and ready states for email, direct messages, and health;
+   confirm one failed lane leaves the others intact.
+10. Open every returned email/message deep link and confirm it is delegated to
+    the system browser without an auth-bearing redirect.
+11. Restart and verify configuration persistence.
+12. Send a test reminder, change reminder offsets, restart, and verify both native delivery and persisted settings.
+13. After sign-in, enable cloud email reminders, refresh Calendar, verify the pending count, and use Test cloud email.
+14. Test screen reader names, tab order, high DPI, and reduced motion where applicable.
 
 ## Immediate Roadmap
 
@@ -129,6 +146,9 @@ Test the built desktop executable, not only QML source:
 
 - Extend the implemented normalized event model, daily agenda, native reminders, validated join/open links, and notification ledger with snooze and notification actions.
 - Add Google Calendar incremental sync, Microsoft Graph delta sync, Apple EventKit on macOS, Calendly native OAuth/polling, and optional Gmail invitation discovery.
+- Back the canonical message, sleep, and biometric routes with production
+  provider connectors and ingestion while preserving per-platform policy,
+  confidence/source attribution, response bounds, and fail-closed behavior.
 - Implement real Git backup with redacted config, locking, semantic merge, commit, and push.
 - Replace the calendar list with a weekly time grid.
 - Decide Apple calendar strategy: platform EventKit on Apple devices, CalDAV with app-specific credentials, or clearly identity-only Apple support.

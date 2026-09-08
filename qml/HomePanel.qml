@@ -16,8 +16,10 @@ Rectangle {
     property int newsKeywordCount: 0
     property int bookmarkCount: 0
     property var calendarAgenda: ({ total_events: 0, headline: "Weekly events and reminders" })
+    property string morningBriefMetric: "Not loaded"
     property bool anyLoading: Backend.calendar_loading || Backend.weather_loading
-        || Backend.stocks_loading || Backend.news_loading
+        || Backend.stocks_loading || Backend.news_loading || Backend.inbox_loading
+        || Backend.messages_loading || Backend.health_loading
 
     function parseJson(json, fallback) {
         try {
@@ -98,11 +100,44 @@ Rectangle {
         }
     }
 
+    function formatMinutes(value) {
+        if (value === null || value === undefined) return "not reported"
+        var minutes = Math.max(0, Number(value))
+        return Math.floor(minutes / 60) + "h " + Math.round(minutes % 60) + "m"
+    }
+
+    function rebuildMorningBrief() {
+        var inbox = parseJson(Backend.inbox_json, { state: "not_connected", items: [] })
+        var messages = parseJson(Backend.messages_json, { state: "not_connected", items: [] })
+        var health = parseJson(Backend.health_json, { state: "not_connected" })
+        var mailCount = inbox.items ? inbox.items.length : 0
+        var messageCount = messages.items ? messages.items.length : 0
+        var unread = Number(inbox.unread_total || 0) + Number(messages.unread_total || 0)
+        morningBriefMetric = inbox.state === "not_connected" && messages.state === "not_connected"
+            ? "Not loaded" : unread + " unread"
+        morningBriefModel.clear()
+        morningBriefModel.append({
+            title: "Important email",
+            meta: mailCount + (mailCount === 1 ? " item" : " items")
+        })
+        morningBriefModel.append({
+            title: "Direct messages",
+            meta: messageCount + (messageCount === 1 ? " thread" : " threads")
+        })
+        morningBriefModel.append({
+            title: "Sleep",
+            meta: health.sleep ? formatMinutes(health.sleep.asleep_minutes) : "not reported"
+        })
+    }
+
     function refreshAll() {
         Backend.refresh_calendar()
         Backend.refresh_weather()
         Backend.refresh_stocks()
         Backend.refresh_news()
+        Backend.refresh_inbox()
+        Backend.refresh_messages()
+        Backend.refresh_health()
     }
 
     Component.onCompleted: {
@@ -111,6 +146,7 @@ Rectangle {
         rebuildWeather()
         rebuildStocks()
         rebuildNews()
+        rebuildMorningBrief()
     }
 
     Connections {
@@ -121,12 +157,16 @@ Rectangle {
         function onWeather_jsonChanged() { rebuildWeather() }
         function onStocks_jsonChanged() { rebuildStocks() }
         function onNews_jsonChanged() { rebuildNews() }
+        function onInbox_jsonChanged() { rebuildMorningBrief() }
+        function onMessages_jsonChanged() { rebuildMorningBrief() }
+        function onHealth_jsonChanged() { rebuildMorningBrief() }
     }
 
     ListModel { id: calendarModel }
     ListModel { id: weatherModel }
     ListModel { id: stocksModel }
     ListModel { id: newsModel }
+    ListModel { id: morningBriefModel }
     ListModel { id: bookmarkModel }
     ListModel { id: bluetoothPreviewModel }
 
@@ -233,6 +273,24 @@ Rectangle {
                     loading: Backend.news_loading
                     onOpen: root.navigate(4)
                     onRefresh: Backend.refresh_news()
+                }
+
+                PreviewCard {
+                    theme: root.theme
+                    Layout.preferredWidth: homeGrid.cardWidth
+                    Layout.preferredHeight: 248
+                    title: "Morning brief"
+                    metric: root.morningBriefMetric
+                    detail: "Important email, direct messages, sleep, and recovery"
+                    model: morningBriefModel
+                    emptyText: "Open Morning brief to load consented sources."
+                    loading: Backend.inbox_loading || Backend.messages_loading || Backend.health_loading
+                    onOpen: root.navigate(10)
+                    onRefresh: {
+                        Backend.refresh_inbox()
+                        Backend.refresh_messages()
+                        Backend.refresh_health()
+                    }
                 }
 
                 PreviewCard {

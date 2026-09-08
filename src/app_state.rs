@@ -8,7 +8,7 @@
 
 use serde::Serialize;
 
-pub const LANE_COUNT: usize = 9;
+pub const LANE_COUNT: usize = 12;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -124,6 +124,9 @@ pub enum Lane {
     CloudNotification = 6,
     CloudReminderSync = 7,
     Bluetooth = 8,
+    Inbox = 9,
+    DirectMessages = 10,
+    Health = 11,
 }
 
 impl Lane {
@@ -137,6 +140,9 @@ impl Lane {
         Self::CloudNotification,
         Self::CloudReminderSync,
         Self::Bluetooth,
+        Self::Inbox,
+        Self::DirectMessages,
+        Self::Health,
     ];
 
     pub const fn requires_auth(self) -> bool {
@@ -146,6 +152,8 @@ impl Lane {
                 | Self::OnboardingHydration
                 | Self::CloudNotification
                 | Self::CloudReminderSync
+                | Self::Inbox
+                | Self::DirectMessages
         )
     }
 }

@@ -15,8 +15,8 @@ The machine is the sole owner of:
 - onboarding (`welcome`, `account`, `backup`, `essentials`, `ready`,
   `complete`); and
 - the lifecycle of calendar, weather, stocks, news, Bluetooth device,
-  onboarding hydration, desktop notification, cloud notification, and
-  cloud-reminder-sync effects.
+  onboarding hydration, desktop notification, cloud notification,
+  cloud-reminder-sync, important-inbox, direct-message, and health effects.
 
 UI code may request an event and render the resulting snapshot. It may not set
 control-state flags directly. Editable configuration cannot set onboarding or
@@ -25,8 +25,11 @@ authentication state.
 Every asynchronous effect that can mutate modeled control state receives a
 monotonically increasing token. A result may commit only while its lane is
 `running` and its token is still active.
-Logout clears every authenticated lane, so a late OAuth, calendar, onboarding,
-or cloud callback is explicitly stale and cannot restore or overwrite state.
+Logout clears every authenticated lane, so a late OAuth, calendar, inbox,
+direct-message, onboarding, or cloud callback is explicitly stale and cannot
+restore or overwrite state. The health lane is modeled as public so future
+device-local reads can work without cloud identity; the current gateway-backed
+desktop adapter still requires a signed-in session and fails closed otherwise.
 
 Every event is total and produces one disposition:
 
@@ -53,7 +56,7 @@ future path away from `complete` is a machine-checkable violation.
 
 The production Rust tests independently explore the reachable graph from every
 valid persisted authentication/onboarding startup combination, through two
-global operation generations across all nine lanes. For every event from every
+global operation generations across all twelve lanes. For every event from every
 visited state they check totality, determinism, post-transition invariants,
 stale-result suppression, independent-lane behavior, strict onboarding edges,
 and reachability of every auth/onboarding/lane phase.
@@ -87,7 +90,7 @@ The local verification baseline is:
 - 10,000 randomized 24-step traces passed, witnessing every app, auth, lane,
   and onboarding terminal phase;
 - Apalache found no violation in any execution through four transitions; and
-- the exhaustive production-state explorer passed.
+- the exhaustive production-state explorer passed across all twelve lanes.
 
 ## Cross-runtime conformance gate
 

@@ -1,6 +1,7 @@
 use crate::config::ReminderSettings;
 use crate::services::calendar::CalendarEvent;
 use crate::url_safety::is_safe_http_url;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::{Mutex, OnceLock};
@@ -92,7 +93,7 @@ pub fn sync_calendar_reminders(
     let sync_url = gateway_url("v1/reminders/sync")?;
     let response: SyncResponse = crate::http::send_json(
         "Happy Wakey cloud reminders",
-        crate::http::shared_client()
+        crate::http::authorized_client()
             .put(sync_url)
             .bearer_auth(&access_token)
             .json(&ReminderSyncRequest { jobs }),
@@ -100,7 +101,7 @@ pub fn sync_calendar_reminders(
     let status_url = gateway_url("v1/reminders/status")?;
     let status: StatusResponse = crate::http::get_json(
         "Happy Wakey cloud reminder status",
-        crate::http::shared_client()
+        crate::http::authorized_client()
             .get(status_url)
             .bearer_auth(&access_token),
     )?;
@@ -117,12 +118,50 @@ pub fn queue_test_reminder(supabase_access_token: &str) -> Result<(), String> {
     let url = gateway_url("v1/reminders/test")?;
     let _: serde_json::Value = crate::http::send_json(
         "Happy Wakey cloud reminder test",
-        crate::http::shared_client()
+        crate::http::authorized_client()
             .post(url)
             .bearer_auth(access_token)
             .json(&serde_json::json!({})),
     )?;
     Ok(())
+}
+
+/// Execute one bounded authenticated GET against a canonical Happy Wakey v1
+/// route. The caller's Supabase token is exchanged in memory and neither token
+/// is returned to the UI, persisted, logged, or forwarded across redirects.
+pub fn get_authorized_json<T>(
+    supabase_access_token: &str,
+    path: &str,
+    service: &'static str,
+) -> Result<T, String>
+where
+    T: DeserializeOwned,
+{
+    if !is_canonical_gateway_path(path) {
+        return Err("Happy Wakey gateway path was invalid".to_owned());
+    }
+    let access_token = shared_auth_access_token(supabase_access_token)?;
+    let url = gateway_url(path)?;
+    crate::http::get_json(
+        service,
+        crate::http::authorized_client()
+            .get(url)
+            .bearer_auth(access_token)
+            .header("Accept", "application/json"),
+    )
+}
+
+fn is_canonical_gateway_path(path: &str) -> bool {
+    if path.len() > 256 || !path.starts_with("v1/") {
+        return false;
+    }
+    path.split('/').all(|segment| {
+        !segment.is_empty()
+            && segment.len() <= 64
+            && segment
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    })
 }
 
 fn shared_auth_access_token(supabase_access_token: &str) -> Result<String, String> {
@@ -144,7 +183,7 @@ fn shared_auth_access_token(supabase_access_token: &str) -> Result<String, Strin
     let exchange_url = shared_auth_url("auth/exchange")?;
     let response: ExchangeResponse = crate::http::send_json(
         "Shared auth",
-        crate::http::shared_client()
+        crate::http::authorized_client()
             .post(exchange_url)
             .bearer_auth(supabase_access_token)
             .json(&serde_json::json!({})),
@@ -336,5 +375,24 @@ mod tests {
             "https://gateway.example.test/v1/bootstrap"
         );
         std::env::remove_var("HAPPY_WAKEY_GATEWAY_URL");
+    }
+
+    #[test]
+    fn authenticated_reads_reject_noncanonical_paths_before_token_exchange() {
+        for path in [
+            "",
+            "/v1/messages/digest",
+            "../v1/messages/digest",
+            "v1/x?token=y",
+            "v1//messages/digest",
+            "v1/%2e%2e/messages/digest",
+            "v1/Messages/digest",
+        ] {
+            let error = get_authorized_json::<serde_json::Value>("", path, "Synthetic service")
+                .unwrap_err();
+            assert_eq!(error, "Happy Wakey gateway path was invalid");
+        }
+        assert!(is_canonical_gateway_path("v1/messages/digest"));
+        assert!(is_canonical_gateway_path("v1/health/sleep/2026-09-06"));
     }
 }
