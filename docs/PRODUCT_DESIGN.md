@@ -2,7 +2,11 @@
 
 ## Product Intent
 
-Happy Wakey is a daytime desktop command center. Its primary job is to help the user understand and tackle the day through a dependable agenda and calendar reminders. It also keeps weather, markets, important news, and frequently used pages in one stable window.
+Happy Wakey is a daytime desktop command center. Its primary job is to help the
+user understand and tackle the day through a dependable agenda and calendar
+reminders. It also keeps important email, policy-approved direct messages,
+sleep/recovery, weather, markets, important news, and frequently used pages in
+one stable window.
 
 The product should reduce browser-tab sprawl and context switching without turning into another noisy feed. The ideal experience is quiet, fast, glanceable, and trustworthy enough to remain open all day.
 
@@ -29,8 +33,12 @@ The sidebar is stable and always uses the same order:
 3. Weather
 4. Stocks
 5. News
-6. Devices
-7. Settings
+6. Planner
+7. Focus
+8. Devices
+9. Browser
+10. Settings
+11. Morning brief
 
 Home is the summary. Each other panel is the focused workspace. Users should never need to guess whether a command affects one panel or the whole app.
 
@@ -66,16 +74,38 @@ The time is re-evaluated every minute by `Theme.qml`; no restart is needed when 
 
 ### Home
 
-Home is a six-card summary:
+Home is a seven-card summary:
 
 - Calendar: next events and authentication status.
 - Weather: favorite count and current-condition previews.
 - Stocks: watchlist count and quote previews.
 - News: keyword count and matched-headline previews.
+- Morning brief: bounded counts for important email and direct messages plus
+  the latest sleep duration reported by a connected source.
 - Devices: Bluetooth support, connected device, and scan state.
 - Setup: account, sync, API, and backup state.
 
 Each data card has a local Refresh action and an Open action. Refresh All is disabled while any panel refresh is active, which prevents accidental duplicate sweeps.
+
+### Morning brief
+
+Morning brief is a deliberately bounded attention queue, not a merged firehose.
+Its three independent lanes are:
+
+- Important email: selected Gmail or Microsoft mail metadata, without bodies,
+  body previews, attachments, or extended properties.
+- Direct messages: only server-approved platforms whose canonical contract
+  reports `full_read` or `throttled_read`; denied platforms never leak a
+  preview through an aggregate response.
+- Sleep and recovery: previous-night sleep plus current-day biometrics from
+  connected sources, with missing values kept absent and observations clearly
+  separated from medical diagnosis.
+
+Nothing loads merely because the panel became visible. A signed-in user starts
+each refresh, each lane reports its own loading/empty/degraded/failure state,
+and a failed source cannot erase successful results from another lane. Provider
+links open only through the same external-URL safety boundary used elsewhere in
+the app.
 
 ### Calendar
 
@@ -179,6 +209,8 @@ The current Continue and Open Dashboard controls use a fixed 44-pixel hit area. 
 - A data refresh must never run on the GUI thread.
 - A second click while the same refresh is active is ignored and the button remains disabled.
 - Partial provider success should retain successful data and report failed items.
+- Consent-sensitive inbox, message, and health reads require an explicit user
+  refresh and must never expose bearer tokens or raw upstream error bodies.
 - Destructive actions should be explicit and reversible where possible.
 - External URLs are normalized and restricted to HTTP/HTTPS.
 - Status text belongs in the persistent footer, not in transient invisible logs.

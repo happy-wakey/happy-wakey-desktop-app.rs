@@ -30,9 +30,10 @@ flowchart LR
     QML <--> Backend["CXX-Qt Backend QObject"]
     Backend --> Workers["Rust worker threads"]
     Workers --> HTTP["Shared Reqwest client"]
-    HTTP --> Providers["Calendar, weather, stocks, news, Supabase"]
+    HTTP --> Providers["Calendar, inbox metadata, weather, stocks, news, Supabase"]
     HTTP --> SharedAuth["Shared auth token exchange"]
     SharedAuth --> Gateway["Happy Wakey product gateway"]
+    Gateway --> Briefing["Policy-aware messages, sleep, and biometrics"]
     Gateway --> Contact["NATS contact service / SendGrid"]
     Backend <--> Config["Sanitized local JSON"]
     Backend <--> Supabase["Supabase auth and REST sync"]
@@ -61,7 +62,8 @@ The GUI thread never intentionally performs provider HTTP calls.
 `src/main.rs` defines a CXX-Qt bridge and a generated `QObject`. Important properties include:
 
 - identity: `logged_in`, `user_email`, `user_id`;
-- data: `calendar_json`, `calendar_agenda_json`, `weather_json`, `stocks_json`, `news_json`;
+- data: `calendar_json`, `calendar_agenda_json`, `weather_json`, `stocks_json`,
+  `news_json`, `inbox_json`, `messages_json`, and `health_json`;
 - loading state: one boolean per external data panel;
 - configuration: `app_config_json`, `onboarding_json`;
 - Bluetooth: discovered devices, connected-device identity, scan/busy state,
@@ -73,6 +75,8 @@ Important QML invokables include:
 - `startup()`;
 - `login(provider)` and `logout()`;
 - one refresh method per data panel;
+- independent `refresh_inbox()`, `refresh_messages()`, and `refresh_health()`
+  methods for the Morning brief lanes;
 - `save_config(json)`;
 - `save_onboarding_state(...)`;
 - `open_url(url)`;
@@ -95,12 +99,13 @@ sequenceDiagram
     participant API as External API
 
     UI->>B: refresh_weather()
-    B->>B: guard loading flag
+    B->>B: acquire lane generation token
     B->>UI: weather_loading = true
     B->>W: spawn work
     W->>API: bounded/retry-aware GET
     API-->>W: JSON or error
     W->>B: queue result to Qt thread
+    B->>B: reject stale completion or commit current result
     B->>UI: data + loading=false + status
 ```
 
@@ -108,14 +113,15 @@ Weather uses up to five scoped workers so locations load concurrently. Stocks re
 
 ## Network Stack
 
-The shared HTTP client in `src/http.rs` provides:
+The shared HTTP layer in `src/http.rs` provides:
 
 - one process-wide connection pool;
 - 5-second connect timeout;
 - 15-second request timeout;
 - 90-second idle pool timeout;
 - TCP keepalive;
-- at most five redirects;
+- at most five redirects for anonymous requests and zero redirects for every
+  request carrying a bearer token;
 - application User-Agent;
 - at most three attempts for idempotent GETs;
 - retries for timeout, connect failure, HTTP 408, HTTP 429, and server errors;
@@ -139,6 +145,14 @@ Local user configuration is stored as JSON under the OS config directory unless 
 Saving uses a temporary file, flush/sync, and rename. Unix files are restricted to mode `0600`.
 
 Shared-auth access tokens are cached only in process memory and are cleared on logout. The desktop never receives NATS addresses, contact-service credentials, SendGrid keys, or the backend introspection secret.
+
+The Important email lane uses the provider token only on its worker thread and
+never serializes it into a QML payload. Gmail is constrained to metadata and
+selected headers; Microsoft is constrained to basic mail properties. The
+Direct messages and Health lanes send only a short-lived Shared Auth bearer to
+canonical gateway paths. Those paths are fixed under `v1/`, reject traversal,
+queries, fragments, and backslashes, and refuse authorization-bearing
+redirects.
 
 ## Tech Stack
 
@@ -171,12 +185,14 @@ Shared-auth access tokens are cached only in process memory and are cleared on l
 | `src/config.rs` | Config schema, sanitization, merge rules, atomic local persistence |
 | `src/env_config.rs` | `.env`, environment, and CLI precedence |
 | `src/http.rs` | Shared bounded and retry-aware HTTP GET layer |
-| `src/gateway.rs` | Shared-auth token exchange/cache and cloud reminder reconciliation |
+| `src/gateway.rs` | Shared-auth token exchange/cache, canonical protected reads, and cloud reminder reconciliation |
 | `src/reminders.rs` | Reminder reconciliation, native delivery, and atomic deduplication ledger |
 | `src/bluetooth.rs` | Product-service discovery, connection lifecycle, and bounded BLE commands |
 | `src/supabase.rs` | PKCE OAuth loopback login and session parsing |
 | `src/supabase_config.rs` | User-scoped Supabase REST config/onboarding access |
 | `src/services/calendar.rs` | Google Calendar and Microsoft Graph adapters |
+| `src/services/inbox.rs` | Metadata-only Gmail and Microsoft Graph priority-inbox adapters |
+| `src/services/morning_brief.rs` | Canonical direct-message, sleep, and biometric normalization |
 | `src/services/weather.rs` | Open-Meteo primary and OpenWeather fallback |
 | `src/services/stocks.rs` | Finnhub quote adapter |
 | `src/services/news.rs` | NewsAPI adapter and local relevance enforcement |
@@ -185,6 +201,7 @@ Shared-auth access tokens are cached only in process memory and are cleared on l
 | `qml/OnboardingPanel.qml` | Five-step setup flow |
 | `qml/*Panel.qml` | Feature-specific views |
 | `qml/DevicesPanel.qml` | Native Bluetooth discovery and device controls |
+| `qml/MorningBriefPanel.qml` | Native bounded Important email, Direct messages, and Sleep & recovery view |
 | `supabase_setup.sql` | Declarative idempotent schema, RLS, policies, triggers |
 
 ## Why Qt Instead of an HTML Shell?

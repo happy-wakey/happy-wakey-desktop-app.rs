@@ -7,9 +7,15 @@ on:
       - 'formal/**'
       - 'src/app_state.rs'
       - 'src/bluetooth.rs'
+      - 'src/gateway.rs'
+      - 'src/http.rs'
       - 'src/main.rs'
       - 'src/config.rs'
+      - 'src/services/inbox.rs'
+      - 'src/services/morning_brief.rs'
+      - 'qml/HomePanel.qml'
       - 'qml/MainWindow.qml'
+      - 'qml/MorningBriefPanel.qml'
       - 'qml/OnboardingPanel.qml'
       - 'qml/SettingsPanel.qml'
       - 'qml/DevicesPanel.qml'
@@ -20,9 +26,15 @@ on:
       - 'formal/**'
       - 'src/app_state.rs'
       - 'src/bluetooth.rs'
+      - 'src/gateway.rs'
+      - 'src/http.rs'
       - 'src/main.rs'
       - 'src/config.rs'
+      - 'src/services/inbox.rs'
+      - 'src/services/morning_brief.rs'
+      - 'qml/HomePanel.qml'
       - 'qml/MainWindow.qml'
+      - 'qml/MorningBriefPanel.qml'
       - 'qml/OnboardingPanel.qml'
       - 'qml/SettingsPanel.qml'
       - 'qml/DevicesPanel.qml'
@@ -142,9 +154,15 @@ jobs:
             formal/app_state_test.qnt \
             src/app_state.rs \
             src/bluetooth.rs \
+            src/gateway.rs \
+            src/http.rs \
             src/main.rs \
             src/config.rs \
+            src/services/inbox.rs \
+            src/services/morning_brief.rs \
+            qml/HomePanel.qml \
             qml/MainWindow.qml \
+            qml/MorningBriefPanel.qml \
             qml/OnboardingPanel.qml \
             qml/SettingsPanel.qml \
             qml/DevicesPanel.qml \

@@ -91,6 +91,7 @@ ApplicationWindow {
                         { icon: "◉",  label: "Devices",      panel: 7 },
                         { icon: "◎",  label: "Browser",      panel: 8 },
                         { icon: "⚙",  label: "Settings",     panel: 9 },
+                        { icon: "☀",  label: "Morning brief", panel: 10 },
                     ]
 
                     ItemDelegate {
@@ -147,6 +148,7 @@ ApplicationWindow {
                 DevicesPanel { theme: theme }
                 BrowserPanel { theme: theme }
                 SettingsPanel { theme: theme }
+                MorningBriefPanel { theme: theme }
             }
         }
     }

@@ -1,27 +1,31 @@
 # Progress
 
-Status date: August 25, 2026
+Status date: September 7, 2026
 
 ## Current Product State
 
 Happy Wakey is a working native Rust and Qt desktop prototype with a cohesive
 dashboard, onboarding, local configuration, Supabase-backed authentication/sync
-foundations, external data panels, and native Bluetooth alarm-device support.
-It has no embedded browser or webview. It is beyond a static mockup, but it is
-not yet a production-ready signed application.
+foundations, external data panels, a bounded Morning brief, and native
+Bluetooth alarm-device support. It has no embedded browser or webview. It is
+beyond a static mockup, but it is not yet a production-ready signed
+application.
 
 ## Capability Matrix
 
 | Area | Status | Current behavior |
 | --- | --- | --- |
 | Native desktop shell | Working | Qt 6 application window with QML navigation and panels |
-| Home dashboard | Working | Preview cards for calendar, weather, stocks, news, Bluetooth devices, and setup |
+| Home dashboard | Working | Preview cards for calendar, weather, stocks, news, Morning brief, Bluetooth devices, and setup |
 | Light daytime theme | Working | Light theme, with a softer low-brightness palette from 5:00 AM to 8:00 AM |
 | Onboarding | Working | Five-step flow with local persistence and Supabase sync after login |
 | Onboarding controls | Live-tested | Continue and Open Dashboard complete the flow and persist completion |
-| Google OAuth | Implemented, configuration required | Supabase PKCE login requests Google calendar read scope |
-| Microsoft OAuth | Implemented, configuration required | Microsoft maps to the Supabase Azure provider and requests `Calendars.Read` |
+| Google OAuth | Implemented, configuration required | Supabase PKCE login requests Calendar read-only plus Gmail metadata; existing sessions must reauthorize for the new scope |
+| Microsoft OAuth | Implemented, configuration required | Microsoft maps to the Supabase Azure provider and requests `Calendars.Read` plus `Mail.ReadBasic` |
 | Apple OAuth | Implemented for identity | Apple login works through Supabase, but Apple Sign-In does not provide a calendar API |
+| Important email | Working in code, provider consent required | Separate metadata-only Gmail/Microsoft lane; selected fields, safe external links, low-priority filtering, and a 20-item cap |
+| Direct messages | Client implemented, gateway data pending | Canonical Shared Auth-protected digest accepts only `full_read`/`throttled_read` platform entries and caps normalized threads at 20 |
+| Sleep and biometrics | Client implemented, gateway data pending | Previous-night sleep and current-day biometrics retain source/confidence, never zero-fill missing values, and cap non-diagnostic observations at eight |
 | Weekly calendar data | Working, credentials required | Google Calendar and Microsoft Graph normalize the current week into day groups, all-day/timed rows, conflict counts, and validated join/open links |
 | Daily agenda and reminders | Working, macOS live-tested | Home and Calendar show agenda summaries; the local scheduler supports configurable 30/10/5-minute native reminders with a persistent deduplication ledger |
 | Off-app email reminders | Implemented, deployment pending | Opt-in deterministic reminder reconciliation through shared auth, a durable Rust gateway, NATS request/reply, and the existing SendGrid contact service |
@@ -32,7 +36,7 @@ not yet a production-ready signed application.
 | Stocks/watchlist | Implemented, key required | Up to 20 Finnhub symbols, one quote request per symbol |
 | News | Implemented, key required | NewsAPI query followed by local keyword enforcement, URL validation, deduplication, and a five-item cap |
 | Bluetooth devices | Implemented, hardware acceptance pending | Native filtered BLE scan, connect/disconnect, and versioned bounded preview-alarm write |
-| External links | Working | HTTP/HTTPS validation followed by system-browser launch; no embedded webview |
+| External links | Working | Credential-free HTTPS or loopback HTTP validation followed by system-browser launch; no embedded webview |
 | Local configuration | Working | Sanitized JSON with atomic replacement and restrictive Unix permissions |
 | Supabase config mirror | Partial | Saves a redacted config snapshot; broader remote config hydration is not wired into startup |
 | Supabase onboarding state | Working in code | Dedicated table and per-user REST reads/upserts; live project access still requires credentials |
@@ -41,7 +45,26 @@ not yet a production-ready signed application.
 | Production packaging | Planned | No checked-in DMG/MSI/AppImage/Flatpak pipeline yet |
 | Automatic updates | Planned | No update channel or signed updater yet |
 
-## Recent Improvement Pass
+## September 2026 Morning Brief Pass
+
+- Added the eleventh native destination, Morning brief, plus a Home preview for
+  important email, policy-approved direct messages, sleep, and recovery.
+- Added independent token-checked inbox, direct-message, and health effect lanes
+  so stale or failed work in one lane cannot overwrite another.
+- Added metadata-only Gmail and Microsoft Graph adapters. Gmail uses unread
+  inbox labels because its metadata scope does not permit search queries;
+  promotions and social mail are filtered locally without fetching bodies.
+- Added a no-redirect authenticated HTTP client and fixed canonical gateway
+  path validation for Shared Auth-protected reads.
+- Added canonical direct-message policy enforcement and sleep/biometric
+  normalization with explicit not-connected, empty, degraded, ready, and failed
+  presentation states.
+- Kept provider and Shared Auth tokens out of QML, serialized result payloads,
+  logs, links, and user-facing gateway errors.
+- Expanded the native and byte-identical Quint state models from nine to twelve
+  lanes, including logout cancellation for the two new auth-bound lanes.
+
+## Earlier Improvement Pass
 
 The July 2026 modernization pass added or changed the following:
 
@@ -74,8 +97,12 @@ The July 2026 modernization pass added or changed the following:
 
 The following checks passed during the modernization pass:
 
-- Desktop `cargo test --locked`: 51 tests passed; one network test remained ignored by default.
+- Desktop `cargo test --locked`: 74 tests passed; one network test remained ignored by default.
 - Desktop `cargo clippy --all-targets --locked -- -D warnings`: passed.
+- Quint: both models typechecked, all 11 deterministic traces passed, and 10,000 randomized 24-step traces found no safety violation across twelve lanes.
+- Apalache: all 21 generated verification conditions passed through four transitions with no violation.
+- Native Qt offscreen startup with the Basic control style loaded the compiled
+  QML module and Morning brief bindings without QML/runtime errors.
 - Gateway `cargo test --locked` and `cargo clippy --all-targets --locked -- -D warnings`: passed.
 - Contact service `cargo check --locked` and `cargo clippy --all-targets --locked -- -D warnings`: passed.
 - Kubernetes Kustomize rendering passed for the runtime and observability overlays; focused Node contract tests passed.
@@ -94,18 +121,26 @@ Finnhub, NewsAPI, authenticated Supabase calls, and end-to-end cloud reminder de
 
 ## Known Gaps
 
-1. Calendar UX still needs a full weekly time grid, provider pagination/delta tokens, token refresh, and simultaneous multi-account aggregation.
-2. Reminders still need snooze/actions, a durable event cache, wake/login lifecycle integration, installed-package verification on Windows/Linux, and JetStream/contact-worker idempotency for crash-safe cloud delivery.
-3. OAuth/session tokens should move from JSON into the OS credential vault.
-4. Git backup needs a real repository lifecycle and conflict policy.
-5. Supabase should hydrate the redacted config snapshot at startup and define field-level merge semantics.
-6. News and market providers need cache/refresh policies and optional alternate providers.
-7. Bluetooth needs real Happy Wakey peripheral firmware fixtures and physical
+1. The canonical message, sleep, and biometric gateway routes still need live provider connectors, durable ingestion, and deployment acceptance; the desktop intentionally fails closed until they exist.
+2. Native health stores still need EventKit/HealthKit-equivalent desktop adapters where an operating system exposes an appropriate API.
+3. Calendar UX still needs a full weekly time grid, provider pagination/delta tokens, token refresh, and simultaneous multi-account aggregation.
+4. Reminders still need snooze/actions, a durable event cache, wake/login lifecycle integration, installed-package verification on Windows/Linux, and JetStream/contact-worker idempotency for crash-safe cloud delivery.
+5. OAuth/session tokens should move from JSON into the OS credential vault.
+6. Git backup needs a real repository lifecycle and conflict policy.
+7. Supabase should hydrate the redacted config snapshot at startup and define field-level merge semantics.
+8. News and market providers need cache/refresh policies and optional alternate providers.
+9. Bluetooth needs real Happy Wakey peripheral firmware fixtures and physical
    CoreBluetooth, WinRT, and BlueZ acceptance evidence.
-8. QML should be moved toward bound components and qualified references to remove `qmllint` warnings.
-9. Windows and Linux builds need real CI and installer acceptance tests.
-10. Production builds need signing, notarization, update delivery, telemetry/privacy decisions, and crash reporting.
+10. QML should be moved toward bound components and qualified references to remove `qmllint` warnings.
+11. Windows and Linux builds need real CI and installer acceptance tests.
+12. Production builds need signing, notarization, update delivery, telemetry/privacy decisions, and crash reporting.
 
 ## Primary Product Goal
 
-The next major milestone is not merely displaying a calendar. Happy Wakey should help the user tackle the day through a morning agenda, dependable upcoming-event notifications, snooze/join/open actions, and consistent sync across Google Calendar, Microsoft 365/Outlook, Apple calendars, Calendly, and relevant Gmail invitations. See [Calendar notifications and reminders](./CALENDAR_NOTIFICATIONS_AND_REMINDERS.md) for the target architecture.
+The next major milestone is an operational morning brief, not merely a larger
+dashboard: dependable event actions plus live, policy-aware message and health
+sources behind the already implemented native lanes. Calendar work should
+continue across Google Calendar, Microsoft 365/Outlook, Apple calendars,
+Calendly, and relevant Gmail invitations. See
+[Calendar notifications and reminders](./CALENDAR_NOTIFICATIONS_AND_REMINDERS.md)
+for the event/reminder target architecture.

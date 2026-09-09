@@ -9,6 +9,7 @@ const MAX_JSON_BYTES: usize = 2 * 1024 * 1024;
 const MAX_GET_ATTEMPTS: usize = 3;
 
 static CLIENT: OnceLock<Client> = OnceLock::new();
+static AUTHORIZED_CLIENT: OnceLock<Client> = OnceLock::new();
 
 /// Process-wide client used only from worker threads.
 pub fn shared_client() -> &'static Client {
@@ -26,6 +27,26 @@ pub fn shared_client() -> &'static Client {
             ))
             .build()
             .expect("failed to build the shared HTTP client")
+    })
+}
+
+/// Process-wide client for requests that carry a provider or Shared Auth
+/// bearer. Redirects are refused so authorization never crosses origins.
+pub fn authorized_client() -> &'static Client {
+    AUTHORIZED_CLIENT.get_or_init(|| {
+        Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(15))
+            .pool_idle_timeout(Duration::from_secs(90))
+            .tcp_keepalive(Duration::from_secs(30))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(concat!(
+                "happy-wakey/",
+                env!("CARGO_PKG_VERSION"),
+                " (+https://github.com/happy-wakey/happy-wakey-desktop-app.rs)"
+            ))
+            .build()
+            .expect("failed to build the authorized HTTP client")
     })
 }
 
@@ -212,5 +233,30 @@ mod tests {
         server.join().expect("join test server");
         assert!(value.ok);
         assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn authorized_client_refuses_redirects() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let address = listener.local_addr().expect("test server address");
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept request");
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request);
+            stream
+                .write_all(
+                    b"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:9/target\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .expect("write redirect");
+        });
+
+        let result: Result<serde_json::Value, _> = get_json(
+            "Authorized test",
+            authorized_client()
+                .get(format!("http://{address}/source"))
+                .bearer_auth("synthetic-test-token"),
+        );
+        server.join().expect("join test server");
+        assert!(result.unwrap_err().contains("302"));
     }
 }

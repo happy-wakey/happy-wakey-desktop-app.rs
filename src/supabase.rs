@@ -83,12 +83,18 @@ pub fn normalize_provider(provider: &str) -> Result<String, String> {
     }
 }
 
-/// Provider OAuth scopes needed so the issued `provider_token` can read calendars.
-/// Returns `None` for providers without a usable calendar API (Apple).
+/// Least-privilege provider OAuth scopes used by the native calendar and inbox
+/// lanes. Gmail metadata excludes message bodies; Microsoft Mail.ReadBasic
+/// excludes bodies, previews, attachments, and extended properties.
+/// Returns `None` for providers without a usable calendar or mail API (Apple).
 fn provider_scopes(provider: &str) -> Option<&'static str> {
     match provider {
-        "google" => Some("email profile https://www.googleapis.com/auth/calendar.readonly"),
-        "azure" => Some("email profile offline_access https://graph.microsoft.com/Calendars.Read"),
+        "google" => Some(
+            "email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.metadata",
+        ),
+        "azure" => Some(
+            "email profile offline_access https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/Mail.ReadBasic",
+        ),
         _ => None,
     }
 }
@@ -357,11 +363,15 @@ mod tests {
     }
 
     #[test]
-    fn provider_scopes_cover_calendar_capable_providers() {
-        assert!(provider_scopes("google")
-            .unwrap()
-            .contains("calendar.readonly"));
-        assert!(provider_scopes("azure").unwrap().contains("Calendars.Read"));
+    fn provider_scopes_cover_calendar_and_metadata_only_mail() {
+        let google = provider_scopes("google").unwrap();
+        assert!(google.contains("calendar.readonly"));
+        assert!(google.contains("gmail.metadata"));
+        assert!(!google.contains("gmail.readonly"));
+        let microsoft = provider_scopes("azure").unwrap();
+        assert!(microsoft.contains("Calendars.Read"));
+        assert!(microsoft.contains("Mail.ReadBasic"));
+        assert!(!microsoft.contains("Mail.ReadWrite"));
         assert!(provider_scopes("apple").is_none());
     }
 

@@ -1,12 +1,14 @@
 # happy-wakey-desktop-app.rs
 
-A cross-platform Rust desktop app for calendar, weather, markets, news, native
-Bluetooth alarm hardware, and frequently used external links. This repository
-revives the complete history of `happy-wakey.rs` under the organization-wide
-`*-desktop-app.rs` convention. The interface is native Qt/QML, the application
-core is Rust, and Supabase provides optional auth and config sync. It contains
-no React surface, embedded browser, or webview. URLs open in the user's system
-browser. Local reminders need no Happy Wakey server; opt-in off-app email
+A cross-platform Rust desktop app for planning a productive morning: calendar,
+weather, markets, news, important email metadata, policy-approved direct
+messages, sleep/recovery summaries, native Bluetooth alarm hardware, and
+frequently used external links. This repository revives the complete history
+of `happy-wakey.rs` under the organization-wide `*-desktop-app.rs` convention.
+The interface is native Qt/QML, the application core is Rust, and Supabase
+provides optional auth and config sync. It contains no React surface, embedded
+browser, or webview. URLs open in the user's system browser. Local reminders
+need no Happy Wakey server; protected summaries and opt-in off-app email
 reminders use the Shared Auth-backed product gateway.
 
 Dependencies and repository scripts are declared in `.zpkg.toml`; use the released `zed-pkg` CLI as the dependency-management entry point.
@@ -68,17 +70,26 @@ for local development only.
 - **Markets:** Finnhub supplies quotes and company profiles. Set `FINNHUB_API_KEY`.
 - **News:** NewsAPI supplies up to five keyword-matched headlines. Set `NEWSAPI_KEY`.
 - **Calendar:** Google Calendar and Microsoft Graph use provider OAuth tokens obtained through Supabase login.
+- **Important email:** Gmail uses the metadata-only OAuth scope; Microsoft Graph uses `Mail.ReadBasic`. The native adapter requests selected headers and identifiers, never message bodies, body previews, attachments, or extended properties, and caps the rendered window at 20 items.
+- **Direct messages:** the desktop reads canonical `/v1/messages/digest` responses from the Happy Wakey gateway. Platform credentials remain server-side, and only `full_read` or `throttled_read` platform entries can expose bounded previews.
+- **Sleep and biometrics:** the desktop reads canonical previous-night sleep and current-day biometric summaries from the gateway. Missing or invalid measurements remain absent instead of being displayed as zero, and anomaly observations are bounded and non-diagnostic.
 - **Reminders:** a local Rust scheduler delivers configurable desktop alerts and persists a deduplication ledger; macOS builds require a stable registered `HAPPY_WAKEY_BUNDLE_ID`.
 - **Off-app reminders:** an opt-in setting reconciles future calendar reminders to the Happy Wakey gateway. The desktop exchanges its Supabase token for a short-lived shared-auth token; the gateway derives the verified email from that identity and delegates delivery through the contact service.
 - **Bluetooth:** native BLE discovery is filtered to the Happy Wakey service UUID. The Devices panel can connect, disconnect, and send a bounded versioned preview-alarm command over the product command characteristic. BLE payloads never contain Shared Auth credentials or customer identifiers.
 
-All GET integrations share a pooled HTTP client with connection and request timeouts, bounded JSON responses, limited redirects, and retries for transient failures. API keys are sent in headers where the provider supports it.
+All GET integrations share pooled HTTP clients with connection and request
+timeouts, bounded JSON responses, and retries for transient failures. Anonymous
+requests allow only a small redirect budget; every bearer-authenticated request
+refuses redirects. API keys are sent in headers where the provider supports it.
 
 ## Supabase OAuth Setup
 
 Configure Google, Apple, and Microsoft as upstream identity providers in the
 Supabase project, and restrict Happy Wakey cloud operations to the Shared Auth
-token exchange enforced by the product gateway.
+token exchange enforced by the product gateway. Google consent requests
+Calendar read-only plus Gmail metadata; Microsoft requests `Calendars.Read`
+plus `Mail.ReadBasic`. Existing sessions created before those scopes were added
+must sign out and sign back in before the Important email lane can load.
 
 ## Project Structure
 
@@ -87,12 +98,14 @@ src/
   main.rs              # Entry point, Backend QObject, Qt event loop
   config.rs            # Local config (JSON in ~/.config/happy-wakey/)
   env_config.rs        # canonical bundled flags2env runtime boundary
-  gateway.rs           # Shared-auth exchange + off-app reminder reconciliation
+  gateway.rs           # Shared-auth exchange + protected product reads/reminders
   reminders.rs         # Native reminder scheduler + delivery ledger
   supabase.rs          # PKCE OAuth login flow
   supabase_config.rs   # Config sync to Supabase REST API
   services/
     calendar.rs        # Google Calendar + Outlook via OAuth tokens
+    inbox.rs           # metadata-only Gmail + Microsoft Graph priority inbox
+    morning_brief.rs   # policy-aware messages + sleep/biometric summaries
     weather.rs         # Open-Meteo + OpenWeather fallback
     stocks.rs          # Finnhub
     news.rs            # NewsAPI
@@ -102,6 +115,7 @@ qml/
   WeatherPanel.qml     # Weather cards
   StocksPanel.qml      # Stock watchlist
   NewsPanel.qml        # News feed
+  MorningBriefPanel.qml # important email, DMs, sleep, and recovery
   DevicesPanel.qml     # Native BLE discovery and alarm-device controls
   SettingsPanel.qml    # Auth buttons, bookmarks, config
 ```
@@ -109,7 +123,7 @@ qml/
 ## Tests
 
 ```bash
-cargo test
+cargo test --locked
 
 # Explicit live smoke test against Open-Meteo
 cargo test open_meteo_live_smoke -- --ignored

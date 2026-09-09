@@ -57,6 +57,11 @@ pub const DESTINATIONS: &[Destination] = &[
         label: "Settings",
         panel: 9,
     },
+    Destination {
+        id: "briefing",
+        label: "Morning brief",
+        panel: 10,
+    },
 ];
 
 #[cfg(test)]
@@ -73,7 +78,7 @@ mod tests {
             ids,
             [
                 "home", "calendar", "weather", "markets", "news", "planner", "focus", "devices",
-                "browser", "settings"
+                "browser", "settings", "briefing"
             ]
         );
         let qml = include_str!("../qml/MainWindow.qml");
@@ -89,14 +94,21 @@ mod tests {
         assert!(qml.contains("FocusPanel"));
         assert!(qml.contains("DevicesPanel"));
         assert!(qml.contains("BrowserPanel"));
+        assert!(qml.contains("MorningBriefPanel"));
         let planner = include_str!("../qml/PlannerPanel.qml");
         let focus = include_str!("../qml/FocusPanel.qml");
         let devices = include_str!("../qml/DevicesPanel.qml");
+        let briefing = include_str!("../qml/MorningBriefPanel.qml");
         assert!(planner.contains("Daily planner"));
         assert!(focus.contains("Start focus"));
         assert!(focus.contains("Pause"));
         assert!(devices.contains("Preview alarm") || devices.contains("scan"));
         assert!(!devices.contains("token"));
         assert!(!devices.contains("owner_id"));
+        assert!(briefing.contains("Important email"));
+        assert!(briefing.contains("Direct messages"));
+        assert!(briefing.contains("Sleep & recovery"));
+        assert!(!briefing.contains("access_token"));
+        assert!(!briefing.contains("provider_token"));
     }
 }

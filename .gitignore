@@ -2,6 +2,8 @@
 .zed/
 zed_modules/
 .env
+/_apalache-out/
+/.formal-artifacts/
 tmp
 temp
 tmp/worktrees

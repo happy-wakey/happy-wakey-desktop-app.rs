@@ -4,7 +4,11 @@
 
 The app is designed to avoid a broad custom application backend.
 
-Direct desktop-to-provider calls still handle calendar, weather, market, and news data. Supabase brokers OAuth and user-scoped synchronization. The only Happy Wakey-specific backend is a narrow opt-in gateway for capabilities and off-app email reminders.
+Direct desktop-to-provider calls handle calendar, metadata-only important mail,
+weather, market, and news data. Supabase brokers OAuth and user-scoped
+synchronization. The narrow Happy Wakey gateway handles policy-aware message
+digests, normalized sleep/biometric summaries, and opt-in off-app email
+reminders.
 
 There is still no central product database. User preferences remain JSON, provider data remains transient in memory, onboarding state remains in Supabase, and the gateway persists a bounded operational reminder queue as JSON on a Kubernetes PVC.
 
@@ -101,9 +105,20 @@ The login flow uses Authorization Code with PKCE:
 
 Provider aliases are normalized. `microsoft` maps to Supabase's `azure` provider.
 
-Calendar APIs use the provider's token, not the Supabase JWT.
+Calendar and Important email APIs use the provider's token, not the Supabase
+JWT. Google consent requests `calendar.readonly` and `gmail.metadata`; the
+metadata scope exposes labels and headers but not message bodies. Microsoft
+requests `Calendars.Read` and `Mail.ReadBasic`; the latter excludes bodies,
+body previews, attachments, and extended properties. Apple Sign In remains an
+identity source only. Existing Google or Microsoft sessions must be
+reauthorized before they can receive newly added mail scopes.
 
-The Happy Wakey gateway accepts only shared-auth bearer tokens. It introspects them with a backend-only credential, derives the user ID and verified delivery email from the result, and never trusts a desktop-supplied email destination.
+The Happy Wakey gateway accepts only shared-auth bearer tokens. It introspects
+them with a backend-only credential, derives the user ID and verified delivery
+email from the result, and never trusts a desktop-supplied email destination.
+The desktop constructs protected read paths only beneath canonical `v1/`
+routes, exchanges its Supabase token in memory, refuses redirects, and returns
+only normalized bounded data to QML.
 
 ## External Service Matrix
 
@@ -111,6 +126,8 @@ The Happy Wakey gateway accepts only shared-auth bearer tokens. It introspects t
 | --- | --- | --- | --- | --- |
 | Google calendar | Google Calendar API | Google provider OAuth token | Current week, primary calendar | Requests read-only scope |
 | Microsoft calendar | Microsoft Graph | Microsoft provider OAuth token | Current week, calendar view | Requests `Calendars.Read` and UTC response timezone |
+| Important Gmail | Gmail API | Google provider OAuth token | At most 20 unread inbox metadata records | `gmail.metadata`; selected headers and labels only, low-priority categories filtered locally |
+| Important Microsoft mail | Microsoft Graph | Microsoft provider OAuth token | At most 20 recent inbox records with selected basic fields | `Mail.ReadBasic`; no body, body preview, attachments, or extensions |
 | Apple identity | Supabase Apple provider | Apple OAuth | Login only | Apple Sign-In does not expose calendar events |
 | Weather | Open-Meteo | None for eligible free use; key for paid customer API | One request per location, up to five in parallel | Current conditions + five days |
 | Weather fallback | OpenWeather | API key in query per provider contract | Used only after Open-Meteo failure | Current conditions only |
@@ -119,6 +136,9 @@ The Happy Wakey gateway accepts only shared-auth bearer tokens. It introspects t
 | Radar | Windy web map | None | External HTTPS URL | Opens interactive map centered on coordinates |
 | Auth/config | Supabase | anon key + user access token | Auth and PostgREST | RLS protects per-user rows |
 | Product auth | Shared auth | Supabase bearer exchange, then short-lived platform bearer | Token exchange and backend introspection | Platform token remains memory-only on desktop |
+| Direct-message digest | Happy Wakey gateway | Shared-auth bearer | Canonical `/v1/messages/digest`, capped at 20 normalized threads | Only `full_read` and `throttled_read` platforms may expose bounded previews |
+| Sleep summary | Happy Wakey gateway | Shared-auth bearer | Canonical previous-night summary | Missing or invalid measurements remain absent; source and confidence are retained |
+| Biometric summary | Happy Wakey gateway | Shared-auth bearer | Canonical current-day summary with at most eight observations | Non-diagnostic observations; no zero-filling |
 | Off-app reminders | Happy Wakey Rust gateway | Shared-auth bearer | User-scoped reconciliation and status | Atomic bounded JSON state on a PVC; no arbitrary destinations |
 | Email delivery | Contact service + SendGrid | In-cluster NATS credential | Fixed-subject request/reply | Matching idempotency key and successful provider outcome required |
 | Gmail invitations | Gmail API | User OAuth, minimum required Gmail scope | Incremental polling on installed clients | Optional enrichment for invites not yet in Calendar |
@@ -137,19 +157,24 @@ Environment settings:
 
 ## HTTP Security and Reliability
 
-External GET calls share one bounded client. Important safeguards include:
+External GET calls share a bounded HTTP layer. Important safeguards include:
 
 - TLS through Rustls;
 - explicit connect/request timeouts;
 - response-size limits;
-- limited redirects;
+- a limited redirect budget for anonymous requests and no redirects at all for
+  bearer-authenticated requests;
 - transient-only retries;
 - URL construction through the `url` crate;
 - API key headers where supported;
 - HTTP/HTTPS validation for user URLs and news results;
 - bounded errors that avoid echoing request URLs containing secrets.
 
-Authenticated product writes use a one-shot JSON helper with the same client and response bounds. They are not automatically retried. Reminder sync is deterministic and idempotent, while the gateway owns delivery retry and recovery.
+Authenticated product writes use a one-shot JSON helper with the same response
+bounds. They are not automatically retried. Authenticated product reads use
+bounded transient retries but never follow redirects. Reminder sync is
+deterministic and idempotent, while the gateway owns delivery retry and
+recovery.
 
 Remaining work:
 

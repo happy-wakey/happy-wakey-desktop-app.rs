@@ -22,6 +22,7 @@ fn main() {
                 "qml/DevicesPanel.qml",
                 "qml/BrowserPanel.qml",
                 "qml/SettingsPanel.qml",
+                "qml/MorningBriefPanel.qml",
                 "qml/OnboardingPanel.qml",
             ],
             ..Default::default()
