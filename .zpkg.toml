@@ -12,6 +12,7 @@ url = "https://github.com/happy-wakey/happy-wakey-desktop-app.rs"
 
 [dependencies]
 "flags-2-env/flags-2-env" = "^0.3.0"
+"oresoftware/ores-desktop-app-libs" = "^0.1.0"
 
 [publish]
 include_readme = true
